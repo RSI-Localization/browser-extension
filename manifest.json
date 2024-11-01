@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "RSI Localization",
+  "version": "1.0",
+  "description": "Localise the https://robertsspaceindustries.com/ website.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "alarms",
+    "background"
+  ],
+  "host_permissions": [
+    "https://raw.githubusercontent.com/RSI-Localization/*"
+  ],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
+  "content_scripts": [{
+    "matches": ["https://*.robertsspaceindustries.com/*"],
+    "js": ["dist/index.js"],
+    "css": ["dist/styles.css"]
+  }],
+  "web_accessible_resources": [{
+    "resources": ["dist/locales/*.json"],
+    "matches": ["https://*.robertsspaceindustries.com/*"]
+  }]
+}
