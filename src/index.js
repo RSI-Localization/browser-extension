@@ -14,12 +14,15 @@ class Main {
             batchSize: CONFIG.CACHE.BATCH_SIZE,
             processInterval: CONFIG.CACHE.PROCESS_INTERVAL
         });
-        // 기본 언어 설정
+
         this.currentLocale = Object.keys(CONFIG.SUPPORTED_LANGUAGES)[0];
 
         document.addEventListener('localeChange', async (e) => {
             const newLocale = e.detail.locale;
-            await this.changeLocale(newLocale);
+
+            if (await this.changeLocale(newLocale)) {
+                window.location.reload();
+            }
         });
     }
 
@@ -95,22 +98,20 @@ class Main {
     updateToolbarLanguageDisplay(locale) {
         const waitForCurrency = setInterval(() => {
             const toolbarButton = document.querySelector('.m-toolBarButton[data-overlay-opener="true"]');
+
             if (toolbarButton) {
                 const label = toolbarButton.querySelector('.m-toolBarButton__label');
                 if (label && label.textContent.includes('/')) {
-                    // 현재 표시된 텍스트에서 통화 부분만 가져오기
                     const currentText = label.textContent;
                     const currencyPart = currentText.split('/')[1].trim();
 
-                    // 새로운 언어 코드와 기존 통화 조합
                     label.textContent = `${locale} / ${currencyPart}`;
                     clearInterval(waitForCurrency);
                 }
             }
         }, 100);
 
-        // 5초 후 자동 정리
-        setTimeout(() => clearInterval(waitForCurrency), 5000);
+        setTimeout(() => clearInterval(waitForCurrency), 1000);
     }
 
     async loadAllTranslations() {
@@ -159,10 +160,7 @@ class Main {
     }
 
     startLocalization() {
-        // Process initial DOM
         this.domManager.processElement(document.body, this.textProcessor, this.localizer).then();
-
-        // Set up mutation observer for dynamic content
         this.domManager.observeMutations((node) => {
             this.domManager.processElement(node, this.textProcessor, this.localizer).then();
         });
@@ -173,8 +171,6 @@ class Main {
 const main = new Main();
 main.init().then(() => {
     console.log('✅ RSI localization initialized');
-    console.log('📚 Supported languages:', CONFIG.SUPPORTED_LANGUAGES);
-    console.log('🌍 Current language:', main.currentLocale);
 });
 
 export const instance = Main.getInstance();
