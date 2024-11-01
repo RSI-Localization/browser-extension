@@ -11,7 +11,8 @@ export class TranslationWorker {
                 const processedNodes = this.processNodes(nodes, translations);
                 sendResponse({ processedNodes });
             }
-            return true; // 비동기 응답을 위해 true 반환
+
+            return true;
         });
     }
 
@@ -21,16 +22,21 @@ export class TranslationWorker {
 
             if (type === 'TEXT_NODE') {
                 const translatedText = translations[text] || text;
+
                 return {
                     type: 'TEXT_NODE',
                     originalText: text,
-                    translatedText: translatedText // 실제 번역된 텍스트 반환
+                    translatedText: translatedText
                 };
-            } else if (type === 'ELEMENT_NODE') {
+            }
+
+            if (type === 'ELEMENT_NODE') {
                 const translatedAttributes = {};
+
                 for (const [key, value] of Object.entries(attributes)) {
                     translatedAttributes[key] = translations[value] || value;
                 }
+
                 return {
                     type: 'ELEMENT_NODE',
                     originalText: text,

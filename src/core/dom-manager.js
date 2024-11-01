@@ -14,6 +14,7 @@ export class DOMManager {
                     await this.processElement(node, processor, localizer);
                 }
             }
+
             return;
         }
 
@@ -29,18 +30,23 @@ export class DOMManager {
                 const originalText = node.textContent.trim();
 
                 if (originalText) {
-                    const translatedText = node.textContent = localizer.translate(originalText);
+                    const processed = processor.processText(originalText);
+                    const translatedPattern = localizer.translate(processed.pattern);
+                    const translatedText = processor.restoreText(translatedPattern, processed.tokens);
+
                     this.applyTranslation(node, originalText, translatedText);
                     this.processedNodes.add(node);
                 }
-
             }
 
             if (node.nodeType === Node.ELEMENT_NODE) {
                 this.localizableAttributes.forEach(attr => {
                     if (node.hasAttribute(attr)) {
                         const originalValue = node.getAttribute(attr);
-                        const translatedValue = localizer.translate(originalValue);
+                        const processed = processor.processText(originalValue);
+                        const translatedPattern = localizer.translate(processed.pattern);
+                        const translatedValue = processor.restoreText(translatedPattern, processed.tokens);
+
                         node.setAttribute(attr, translatedValue);
                     }
                 });
@@ -69,7 +75,6 @@ export class DOMManager {
                     }
 
                     if (node.nodeType === Node.ELEMENT_NODE) {
-                        // 제외할 태그가 아닌 경우만 포함
                         return this.excludeTags.includes(node.tagName.toUpperCase())
                             ? NodeFilter.FILTER_REJECT
                             : NodeFilter.FILTER_ACCEPT;
@@ -96,10 +101,10 @@ export class DOMManager {
         }
 
         if (parent.childNodes.length === 1) {
-            // 단일 텍스트 노드를 가진 부모에 클래스 추가
             parent.classList.add('localized');
             parent.dataset.originalText = originalText;
             node.textContent = translatedText;
+
             return;
         }
 

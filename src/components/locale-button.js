@@ -6,6 +6,7 @@ export class LocaleButton {
         this.langName = langName;
         this.isActive = isActive;
         this.element = null;
+
         LocaleButton.instances.set(locale, this);
     }
 
@@ -37,9 +38,12 @@ export class LocaleButton {
             }
 
             this.element = button;
+
             return button;
+
         } catch (error) {
             console.error('Error creating locale button:', error);
+
             return null;
         }
     }
@@ -49,7 +53,6 @@ export class LocaleButton {
         this.deactivateAll();
         this.activate();
 
-        // 커스텀 이벤트 발생
         const event = new CustomEvent('localeChange', {
             detail: { locale: this.locale }
         });
@@ -87,6 +90,7 @@ export class LocaleButton {
                 const value = computedStyle.getPropertyValue(property);
                 if (value) target.style[property] = value;
             });
+
         } catch (error) {
             console.error('Error copying styles:', error);
         }

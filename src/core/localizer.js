@@ -35,24 +35,19 @@ export class Localizer {
 
         const cacheKey = `${this.currentLocale}:${text}`;
 
-        // 캐시된 번역이 있으면 반환
         if (this.textCache.has(cacheKey)) {
             return this.interpolate(this.textCache.get(cacheKey), params);
         }
 
-        // 현재 로케일의 번역 데이터 가져오기
         const translations = this.translations.get(this.currentLocale);
         if (!translations) {
             return text;
         }
 
-        // 번역된 텍스트 가져오기
         const translation = translations['strings'][text] || text;
-
-        // 캐시에 저장
         this.textCache.set(cacheKey, translation);
 
-        // 번역된 텍스트 반환
+
         return this.interpolate(translation, params);
     }
 
