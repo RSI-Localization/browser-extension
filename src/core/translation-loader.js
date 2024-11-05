@@ -9,6 +9,10 @@ export class TranslationLoader {
     }
 
     async load(locale, currentPath) {
+        if (locale === 'en') {
+            return { page: {} };
+        }
+
         const cacheKey = `${locale}_${currentPath}`;
 
         if (this.translationCache.has(cacheKey)) {
@@ -76,7 +80,7 @@ export class TranslationLoader {
     }
 
     async checkForUpdatesInBackground(locale, currentPath) {
-        if (!navigator.onLine) return;
+        if (locale === 'en' || !navigator.onLine) return;
 
         try {
             const hasUpdate = await LocaleAPI.checkForUpdates(locale, currentPath);

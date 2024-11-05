@@ -3,6 +3,7 @@ import { TranslationManager } from './core/translation-manager';
 import { TextProcessor } from './core/text-processor';
 import { DOMManager } from './core/dom-manager';
 import { LanguageDropdown } from './components/language-dropdown';
+import { StorageManager } from './utils/storage';
 import './styles.css'
 
 class Main {
@@ -11,9 +12,11 @@ class Main {
         this.textProcessor = new TextProcessor();
         this.domManager = new DOMManager();
 
-        this.currentLocale = Object.keys(CONFIG.SUPPORTED_LANGUAGES)[0];
-        this.translationManager.init(this.currentLocale).then();
-        this.languageDropdown = new LanguageDropdown(this.currentLocale);
+        StorageManager.get('selectedLocale').then(result => {
+            this.currentLocale = result.selectedLocale || Object.keys(CONFIG.SUPPORTED_LANGUAGES)[0];
+            this.translationManager.init(this.currentLocale).then();
+            this.languageDropdown = new LanguageDropdown(this.currentLocale);
+        });
     }
 
     async init() {
@@ -42,4 +45,5 @@ const main = new Main();
 
 main.init().then(() => {
     console.log('✅ RSI localization initialized');
+    console.log('🌐 Current locale:', main.currentLocale);
 });

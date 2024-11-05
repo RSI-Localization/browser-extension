@@ -10,7 +10,8 @@ module.exports = {
     output: {
         path: path.resolve(__dirname, 'dist'),
         filename: '[name].js',
-        clean: true
+        clean: true,
+        publicPath: '/'
     },
     module: {
         rules: [
@@ -55,7 +56,7 @@ module.exports = {
     ],
     optimization: {
         splitChunks: {
-            chunks: 'all',
+            chunks: 'async',
             name: 'vendor'
         }
     }

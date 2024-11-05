@@ -9,7 +9,7 @@ export class LanguageDropdown {
         document.addEventListener('localeChange', async (e) => {
             const newLocale = e.detail.locale;
             if (await this.#changeLocale(newLocale)) {
-                window.location.reload();
+                //window.location.reload();
             }
         });
     }
@@ -79,8 +79,9 @@ export class LanguageDropdown {
     async #changeLocale(newLocale) {
         if (CONFIG.SUPPORTED_LANGUAGES[newLocale]) {
             this.currentLocale = newLocale;
-
             await StorageManager.set({ selectedLocale: newLocale });
+
+            console.log('Locale changed to:', newLocale);
 
             return true;
         }

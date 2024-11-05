@@ -6,10 +6,12 @@
   "permissions": [
     "activeTab",
     "storage",
-    "background"
+    "background",
+    "alarms"
   ],
   "host_permissions": [
-    "https://rsi.laeng.co/*"
+    "https://rsi.laeng.co/*",
+    "https://rsi-loaclization.test/*"
   ],
   "background": {
     "service_worker": "dist/background.js"
