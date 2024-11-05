@@ -6,11 +6,10 @@
   "permissions": [
     "activeTab",
     "storage",
-    "alarms",
     "background"
   ],
   "host_permissions": [
-    "https://raw.githubusercontent.com/RSI-Localization/*"
+    "https://rsi.laeng.co/*"
   ],
   "background": {
     "service_worker": "dist/background.js"
@@ -18,10 +17,14 @@
   "content_scripts": [{
     "matches": ["https://*.robertsspaceindustries.com/*"],
     "js": ["dist/index.js"],
+    "run_at": "document_end",
     "css": ["dist/styles.css"]
   }],
   "web_accessible_resources": [{
-    "resources": ["dist/locales/*.json"],
+    "resources": [
+      "dist/index.js",
+      "dist/styles.css"
+    ],
     "matches": ["https://*.robertsspaceindustries.com/*"]
   }]
 }

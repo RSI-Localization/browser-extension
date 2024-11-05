@@ -10,5 +10,28 @@ export const CONFIG = {
         SIZE: 1000,
         BATCH_SIZE: 200,
         PROCESS_INTERVAL: 16
-    }
+    },
+    PATHS: {
+        COMMON: {
+            base: '/base',
+        },
+        PAGES: {
+            home: '/',
+            game: '/game',
+            pledge: '/pledge',
+            // ... 기타 일반 페이지
+        },
+        EXTERNAL: {
+            commlink: '/api/comm-link',
+            orgs: '/api/orgs',
+            citizens: '/api/citizens'
+        },
+        STANDALONE: [
+            '/spectrum',
+            '/roadmap',
+            '/community-hub',
+            '/starmap'
+        ]
+    },
+    SERVICE_ID: 'website'
 };

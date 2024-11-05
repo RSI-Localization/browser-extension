@@ -1,24 +1,29 @@
 export class DOMManager {
-    constructor(options = {}) {
+    constructor() {
         this.excludeTags = ['SCRIPT', 'STYLE', 'CODE', 'PRE', 'IFRAME'];
         this.localizableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
         this.processedNodes = new WeakSet();
         this.mutationObserver = null;
     }
 
-    async processElement(element, processor, localizer) {
-        // 배열인 경우 각 요소를 개별적으로 처리
+    load(textProcessor, translationManager) {
+        this.processElement(document.body, textProcessor, translationManager).then();
+        this.observeMutations((node) => {
+            this.processElement(node, textProcessor, translationManager).then();
+        });
+    }
+
+    async processElement(element, textProcessor, translationManager) {
         if (Array.isArray(element)) {
             for (const node of element) {
                 if (node instanceof Node) {
-                    await this.processElement(node, processor, localizer);
+                    await this.processElement(node, textProcessor, translationManager);
                 }
             }
 
             return;
         }
 
-        // 단일 노드 처리
         if (!(element instanceof Node)) {
             return;
         }
@@ -30,9 +35,9 @@ export class DOMManager {
                 const originalText = node.textContent.trim();
 
                 if (originalText) {
-                    const processed = processor.processText(originalText);
-                    const translatedPattern = localizer.translate(processed.pattern);
-                    const translatedText = processor.restoreText(translatedPattern, processed.tokens);
+                    const processed = textProcessor.processText(originalText);
+                    const translatedPattern = translationManager.translate(processed.pattern);
+                    const translatedText = textProcessor.restoreText(translatedPattern, processed.tokens);
 
                     this.applyTranslation(node, originalText, translatedText);
                     this.processedNodes.add(node);
@@ -43,9 +48,9 @@ export class DOMManager {
                 this.localizableAttributes.forEach(attr => {
                     if (node.hasAttribute(attr)) {
                         const originalValue = node.getAttribute(attr);
-                        const processed = processor.processText(originalValue);
-                        const translatedPattern = localizer.translate(processed.pattern);
-                        const translatedValue = processor.restoreText(translatedPattern, processed.tokens);
+                        const processed = textProcessor.processText(originalValue);
+                        const translatedPattern = translationManager.translate(processed.pattern);
+                        const translatedValue = textProcessor.restoreText(translatedPattern, processed.tokens);
 
                         node.setAttribute(attr, translatedValue);
                     }

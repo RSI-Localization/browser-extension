@@ -49,10 +49,6 @@ module.exports = {
                             // development용 키 제거
                         }))
                     }
-                },
-                {
-                    from: "src/locales",
-                    to: "locales"
                 }
             ]
         })

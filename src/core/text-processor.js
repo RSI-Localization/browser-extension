@@ -1,53 +1,40 @@
+import i18next from 'i18next';
+
 export class TextProcessor {
-    constructor(options = {}) {
-        this.patterns = {
-            numbers: /\b\d+\.\d+\b|\b\d+\b(?!\w)/g,
-            mixed: /\w{2,}\d+\w*|\w*\d+\w{2,}/g
-        };
+    constructor() {
+        i18next.init({
+            interpolation: {
+                escapeValue: false,
+                format: (value, format, lng) => {
+                    if (format === 'number') {
+                        return new Intl.NumberFormat(lng).format(value);
+                    }
+                    if (format === 'date') {
+                        return new Intl.DateTimeFormat(lng).format(value);
+                    }
+                    return value;
+                }
+            }
+        });
     }
 
-    processText(originalText) {
-        const tokens = this.extractTokens(originalText);
-        const patternizedText = this.createPattern(originalText, tokens);
+    processText(originalText, tokens = {}) {
+        const translatedText = i18next.t(originalText, {
+            ...tokens,
+            formatParams: {
+                0: { format: 'number' }
+            }
+        });
 
         return {
             original: originalText,
-            pattern: patternizedText,
-            tokens
+            translated: translatedText,
+            pattern: translatedText,
+            tokens: tokens
         };
     }
 
     restoreText(translatedPattern, tokens) {
-        // 번역된 패턴에 토큰 값들을 다시 삽입
-        let restoredText = translatedPattern;
-        tokens.forEach((token, index) => {
-            restoredText = restoredText.replace(
-                new RegExp(`\\{${index}\\}`, 'g'),
-                token.value
-            );
-        });
-        return restoredText;
-    }
-
-    extractTokens(text) {
-        const tokens = [];
-        Object.entries(this.patterns).forEach(([type, pattern]) => {
-            const matches = text.match(pattern) || [];
-            tokens.push(...matches.map(value => ({ type, value })));
-        });
-        return tokens;
-    }
-
-    createPattern(text, tokens) {
-        let pattern = text;
-        tokens.forEach((token, index) => {
-            const regex = new RegExp(this.escapeRegExp(token.value), 'g');
-            pattern = pattern.replace(regex, `{${index}}`);
-        });
-        return pattern;
-    }
-
-    escapeRegExp(string) {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return i18next.t(translatedPattern, tokens);
     }
 }

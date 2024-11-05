@@ -11,16 +11,36 @@ export class StorageManager {
         });
     }
 
-    static async getCurrentVersion(locale) {
-        const result = await this.get(`version_${locale}`);
-        return result[`version_${locale}`] || '0.0.0';
+    static getStorageKey(locale, path) {
+        return `locale_${locale}_${path.replace(/\//g, '_')}`;
     }
 
-    static async saveLocaleData(locale, data) {
+    static async getCurrentVersion(locale, path) {
+        const result = await this.getLocaleData(locale, path);
+
+        return result.version;
+    }
+
+    static async getLocaleData(locale, path) {
+        const key = this.getStorageKey(locale, path);
+        const result = await this.get(key);
+
+        return result[key];
+    }
+
+    static async saveLocaleData(locale, path, data) {
+        const key = this.getStorageKey(locale, path);
+        const metadata = {
+            version: data.version,
+            updatedAt: new Date().toISOString(),
+            path: path
+        };
+
         await this.set({
-            [`locale_${locale}`]: data,
-            [`version_${locale}`]: data.version,
-            [`updated_at_${locale}`]: new Date().toISOString()
+            [key]: {
+                data: data,
+                metadata: metadata
+            }
         });
     }
 }

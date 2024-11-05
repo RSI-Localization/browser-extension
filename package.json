@@ -16,5 +16,8 @@
     "rimraf": "^5.0.5",
     "webpack": "^5.88.2",
     "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "i18next": "^23.16.4"
   }
 }
