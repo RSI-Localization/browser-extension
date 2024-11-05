@@ -1,6 +1,5 @@
 export const CONFIG = {
-    //LOCALE_SERVER: 'https://rsi.laeng.co',
-    LOCALE_SERVER: 'https://rsi-localization.test',
+    LOCALE_SERVER: 'https://rsi.laeng.co',
     UPDATE_INTERVAL_HOURS: 24,
     LOCALES_TO_MONITOR: ['ko'],
     SUPPORTED_LANGUAGES: {
