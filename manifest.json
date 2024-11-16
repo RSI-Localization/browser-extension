@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "RSI Localization",
   "version": "1.0",
-  "description": "Localise the https://robertsspaceindustries.com/ website.",
+  "description": "Localise the Roberts Space Industries website. Developed by Laeng with GalaxyHub.",
   "permissions": [
     "activeTab",
     "storage",
@@ -16,17 +16,33 @@
   "background": {
     "service_worker": "dist/background.js"
   },
-  "content_scripts": [{
-    "matches": ["https://*.robertsspaceindustries.com/*"],
-    "js": ["dist/index.js"],
-    "run_at": "document_end",
-    "css": ["dist/styles.css"]
-  }],
-  "web_accessible_resources": [{
-    "resources": [
-      "dist/index.js",
-      "dist/styles.css"
-    ],
-    "matches": ["https://*.robertsspaceindustries.com/*"]
-  }]
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.robertsspaceindustries.com/*"
+      ],
+      "js": [
+        "dist/index.js"
+      ],
+      "run_at": "document_end",
+      "css": [
+        "dist/styles.css"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dist/index.js",
+        "dist/styles.css"
+      ],
+      "matches": [
+        "https://*.robertsspaceindustries.com/*"
+      ]
+    }
+  ],
+  "icons": {
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  }
 }

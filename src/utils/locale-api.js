@@ -1,0 +1,80 @@
+import {CONFIG} from "../config";
+
+export class LocaleAPI {
+    static defaultHeaders = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+    };
+
+    static async fetchJSON(url, options = {}) {
+        const response = await fetch(url, {
+            ...options,
+            headers: this.defaultHeaders
+        });
+        return response.json();
+    }
+
+    static buildUrl(path) {
+        return `${CONFIG.LOCALE_SERVER}/api/v1/${path}`;
+    }
+
+    static async getServices() {
+        return this.fetchJSON(this.buildUrl('services'));
+    }
+
+    static async getVersionData() {
+        return this.fetchJSON(this.buildUrl('localization/all/version'));
+    }
+
+    static async getSupportedLanguages() {
+        return this.fetchJSON(this.buildUrl('localization/website/languages'));
+    }
+
+    static async getModuleVersion(locale, path) {
+        const data = await this.fetchJSON(
+            this.buildUrl(`localization/website/${locale}/modules${path}/version`)
+        );
+        return data.version || null;
+    }
+
+    static async getStandaloneVersion(locale, path) {
+        const data = await this.fetchJSON(
+            this.buildUrl(`localization/website/${locale}/modules${path}/version`)
+        );
+        return data.version || null;
+    }
+
+    static async getCommonResources(serviceId, locale) {
+        return this.fetchJSON(
+            this.buildUrl(`localization/website/${locale}/common`)
+        );
+    }
+
+    static async getModuleResources(locale, path) {
+        return this.fetchJSON(
+            this.buildUrl(`localization/website/${locale}/modules${path}`)
+        );
+    }
+
+    static async getStandaloneResources(locale, path) {
+        return this.fetchJSON(
+            this.buildUrl(`localization/website/${locale}/standalone${path}`)
+        );
+    }
+
+    static async getBulkResources(locale, options) {
+        const requestBody = {
+            modules: options.modules || [],
+            standalone: options.standalone || [],
+            includeCommon: options.includeCommon || false
+        };
+
+        return this.fetchJSON(
+            this.buildUrl(`localization/website/${locale}/bulk`),
+            {
+                method: 'POST',
+                body: JSON.stringify(requestBody)
+            }
+        );
+    }
+}

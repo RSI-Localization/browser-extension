@@ -1,64 +1,71 @@
+import {LocaleStorage} from "../utils/locale-storage";
+
 export class DOMManager {
     constructor() {
         this.excludeTags = ['SCRIPT', 'STYLE', 'CODE', 'PRE', 'IFRAME'];
         this.localizableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
         this.processedNodes = new WeakSet();
         this.mutationObserver = null;
+        this.processingQueue = new Set();
     }
 
-    load(textProcessor, translationManager) {
-        this.processElement(document.body, textProcessor, translationManager).then();
-        this.observeMutations((node) => {
-            this.processElement(node, textProcessor, translationManager).then();
+    async load(textProcessor, translationManager) {
+        await this.processElement(document.body, textProcessor, translationManager);
+        this.observeMutations((nodes) => {
+            this.processNodes(nodes, textProcessor, translationManager);
         });
     }
 
-    async processElement(element, textProcessor, translationManager) {
-        if (Array.isArray(element)) {
-            for (const node of element) {
-                if (node instanceof Node) {
-                    await this.processElement(node, textProcessor, translationManager);
-                }
+    async processNodes(nodes, textProcessor, translationManager) {
+        for (const node of nodes) {
+            if (!this.processingQueue.has(node)) {
+                this.processingQueue.add(node);
+                await this.processElement(node, textProcessor, translationManager);
+                this.processingQueue.delete(node);
             }
-
-            return;
         }
+    }
 
-        if (!(element instanceof Node)) {
-            return;
-        }
+    async processElement(element, textProcessor, translationManager) {
+        if (!element || this.processedNodes.has(element)) return;
 
         const nodesToProcess = this.collectNodes(element);
+        const currentLocale = await LocaleStorage.getCurrentLocale();
 
-        nodesToProcess.forEach(node => {
+        if (currentLocale === 'en') {
+            this.processedNodes.add(element);
+            return;
+        }
+
+        for (const node of nodesToProcess) {
             if (node.nodeType === Node.TEXT_NODE) {
                 const originalText = node.textContent.trim();
-
                 if (originalText) {
                     const processed = textProcessor.processText(originalText);
-                    const translatedPattern = translationManager.translate(processed.pattern);
+                    const translatedPattern = await translationManager.translate(processed.pattern);
                     const translatedText = textProcessor.restoreText(translatedPattern, processed.tokens);
-
                     this.applyTranslation(node, originalText, translatedText);
-                    this.processedNodes.add(node);
                 }
             }
 
             if (node.nodeType === Node.ELEMENT_NODE) {
-                this.localizableAttributes.forEach(attr => {
-                    if (node.hasAttribute(attr)) {
-                        const originalValue = node.getAttribute(attr);
-                        const processed = textProcessor.processText(originalValue);
-                        const translatedPattern = translationManager.translate(processed.pattern);
-                        const translatedValue = textProcessor.restoreText(translatedPattern, processed.tokens);
-
-                        node.setAttribute(attr, translatedValue);
-                    }
-                });
-
-                this.processedNodes.add(node);
+                await this.processAttributes(node, textProcessor, translationManager);
             }
-        });
+
+            this.processedNodes.add(node);
+        }
+    }
+
+    async processAttributes(node, textProcessor, translationManager) {
+        for (const attr of this.localizableAttributes) {
+            if (node.hasAttribute(attr)) {
+                const originalValue = node.getAttribute(attr);
+                const processed = textProcessor.processText(originalValue);
+                const translatedPattern = await translationManager.translate(processed.pattern);
+                const translatedValue = textProcessor.restoreText(translatedPattern, processed.tokens);
+                node.setAttribute(attr, translatedValue);
+            }
+        }
     }
 
     collectNodes(element) {
@@ -69,23 +76,8 @@ export class DOMManager {
             {
                 acceptNode: (node) => {
                     if (this.processedNodes.has(node)) return NodeFilter.FILTER_REJECT;
-
-                    if (node.nodeType === Node.TEXT_NODE) {
-                        const text = node.textContent.trim();
-                        // 공백이 아닌 텍스트만 포함
-                        if (text && /\S/.test(text)) {
-                            return NodeFilter.FILTER_ACCEPT;
-                        }
-                        return NodeFilter.FILTER_REJECT;
-                    }
-
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        return this.excludeTags.includes(node.tagName.toUpperCase())
-                            ? NodeFilter.FILTER_REJECT
-                            : NodeFilter.FILTER_ACCEPT;
-                    }
-
-                    return NodeFilter.FILTER_REJECT;
+                    if (this.shouldExcludeNode(node)) return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
                 }
             }
         );
@@ -98,24 +90,30 @@ export class DOMManager {
         return nodes;
     }
 
-    applyTranslation(node, originalText, translatedText) {
-        const parent = node.parentNode;
-
-        if (originalText === translatedText) {
-            return;
+    shouldExcludeNode(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            return !node.textContent.trim() || !(/\S/.test(node.textContent));
         }
 
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            return this.excludeTags.includes(node.tagName.toUpperCase());
+        }
+
+        return true;
+    }
+
+    applyTranslation(node, originalText, translatedText) {
+        if (originalText === translatedText) return;
+
+        const parent = node.parentNode;
         if (parent.childNodes.length === 1) {
             parent.classList.add('localized');
             parent.dataset.originalText = originalText;
             node.textContent = translatedText;
-
             return;
         }
 
-        // 여러 노드가 있는 경우 span으로 래핑
         const span = document.createElement('span');
-
         span.classList.add('localized');
         span.dataset.originalText = originalText;
         span.textContent = translatedText;
@@ -124,27 +122,38 @@ export class DOMManager {
 
     observeMutations(callback) {
         this.mutationObserver = new MutationObserver((mutations) => {
-            const addedNodes = [];
+            const nodesToProcess = new Set();
 
             mutations.forEach(mutation => {
-                // 텍스트 노드 변경 감지
                 if (mutation.type === 'characterData') {
-                    const node = mutation.target;
-                    if (!this.processedNodes.has(node)) {
-                        addedNodes.push(node);
+                    const textNode = mutation.target;
+                    if (!this.shouldExcludeNode(textNode)) {
+                        this.processedNodes.delete(textNode);
+                        nodesToProcess.add(textNode);
                     }
                 }
 
-                // 새로 추가된 노드 감지
+                if (mutation.type === 'childList' || mutation.type === 'subtree') {
+                    mutation.target.querySelectorAll('.localized').forEach(node => {
+                        const currentText = node.textContent;
+                        const originalText = node.dataset.originalText;
+
+                        if (currentText !== originalText) {
+                            this.processedNodes.delete(node);
+                            nodesToProcess.add(node);
+                        }
+                    });
+                }
+
                 mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === Node.ELEMENT_NODE && !this.processedNodes.has(node)) {
-                        addedNodes.push(node);
+                    if (!this.shouldExcludeNode(node)) {
+                        nodesToProcess.add(node);
                     }
                 });
             });
 
-            if (addedNodes.length > 0) {
-                callback(addedNodes);
+            if (nodesToProcess.size > 0) {
+                callback(Array.from(nodesToProcess));
             }
         });
 
@@ -152,7 +161,9 @@ export class DOMManager {
             childList: true,
             subtree: true,
             characterData: true,
-            characterDataOldValue: true
+            characterDataOldValue: true,
+            attributes: true,           // 속성 변경 감지 추가
+            attributeOldValue: true     // 이전 속성값 저장
         });
     }
 }

@@ -1,110 +1,96 @@
 import {CONFIG} from "../config";
-import {StorageManager} from "../utils/storage";
-import {LocaleAPI} from "../utils/api";
+import {LocaleStorage} from "../utils/locale-storage";
+import {LocaleManager} from "../core/locale-manager";
+import {LocaleAPI} from "../utils/locale-api";
 
 export class UpdateWorker {
     constructor() {
+        console.log('UpdateWorker initialized');
         this.setupAlarms();
         this.setupMessageListeners();
         this.updateInProgress = false;
-        this.updateQueue = new Set();
-        this.maxRetries = 3;
+        this.localeManager = new LocaleManager();
     }
 
     setupAlarms() {
         chrome.alarms.create('checkLocaleUpdates', {
-            periodInMinutes: CONFIG.UPDATE_INTERVAL_HOURS * 60
+            periodInMinutes: CONFIG.UPDATE_INTERVAL_HOURS * 60,
+            when: Date.now() + 1000
         });
 
         chrome.alarms.onAlarm.addListener((alarm) => {
             if (alarm.name === 'checkLocaleUpdates') {
-                this.checkForUpdates();
+                console.log('Update alarm triggered');
+                this.checkForUpdates().then();
             }
         });
     }
 
     async checkForUpdates() {
         if (this.updateInProgress) {
+            console.log('Update already in progress');
             return;
         }
 
+        console.log('Starting update check');
         this.updateInProgress = true;
-        const locales = CONFIG.SUPPORTED_LANGUAGES;
 
         try {
-            if (!navigator.onLine) {
+            const currentLocale = await LocaleStorage.getCurrentLocale();
+
+            if (currentLocale === 'en') {
+                console.log('English locale detected, skipping update check');
                 return;
             }
 
-            for (const locale of Object.keys(locales)) {
-                await this.checkLocaleUpdates(locale);
+            if (!navigator.onLine) {
+                console.log('No internet connection');
+                return;
             }
 
-            // 큐에 있는 업데이트 처리
-            for (const update of this.updateQueue) {
-                await this.processUpdate(update);
+            const versionData = await LocaleAPI.getVersionData();
+            const needsUpdate = await LocaleStorage.needsUpdate(versionData);
+
+            if (needsUpdate) {
+                console.log('Updates available, processing...');
+                await this.localeManager.initializePaths();
+                await LocaleStorage.saveGlobalMetadata(versionData);
+                await this.updateCurrentLocale();
+            } else {
+                console.log('No updates needed');
             }
-            this.updateQueue.clear();
+        } catch (error) {
+            console.error('Update check failed:', error);
         } finally {
             this.updateInProgress = false;
         }
     }
 
-    async checkLocaleUpdates(locale) {
-        const updates = [];
+    async updateCurrentLocale() {
+        const currentLocale = await LocaleStorage.getCurrentLocale();
+        const currentPath = await LocaleStorage.getCurrentPath();
 
-        // 공통 요소 체크
-        for (const [key, path] of Object.entries(CONFIG.PATHS.COMMON)) {
-            const needsUpdate = await this.checkAndUpdateFile(locale, path);
-            if (needsUpdate) updates.push({locale, path});
+        if (!currentLocale || !currentPath) {
+            console.log('No locale or path information available');
+            return;
         }
 
-        // 페이지별 체크
-        for (const path of Object.values(CONFIG.PATHS.PAGES)) {
-            const needsUpdate = await this.checkAndUpdateFile(locale, path);
-            if (needsUpdate) updates.push({locale, path});
-        }
-
-        // 배치 처리
-        if (updates.length > 0) {
-            await this.processBatchUpdates(updates);
-        }
-    }
-
-    async checkAndUpdateFile(locale, path, retryCount = 0) {
-        try {
-            const currentVersion = await StorageManager.getCurrentVersion(locale, path);
-            const latestVersion = await LocaleAPI.getLatestVersion(locale, path);
-
-            if (!currentVersion || latestVersion > currentVersion) {
-                return true;
-            }
-            return false;
-        } catch (error) {
-            if (retryCount < this.maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-                return this.checkAndUpdateFile(locale, path, retryCount + 1);
-            }
-            console.error(`Update check failed for ${locale}/${path}:`, error);
-            return false;
-        }
-    }
-
-    async processBatchUpdates(updates) {
-        const batchSize = 5;
-        for (let i = 0; i < updates.length; i += batchSize) {
-            const batch = updates.slice(i, i + batchSize);
-            await Promise.all(batch.map(update => this.processUpdate(update)));
-        }
+        await this.processUpdate({
+            locale: currentLocale,
+            path: currentPath
+        });
     }
 
     async processUpdate({locale, path}) {
         try {
-            const data = await LocaleAPI.getLocaleData(locale, path);
-            await StorageManager.saveLocaleData(locale, path, data);
-            this.broadcastUpdate(locale, path);
+            console.log(`Processing update for ${locale}/${path}`);
+            const data = await this.localeManager.getLocaleData(locale, path);
+            if (data) {
+                await LocaleStorage.saveLocaleData(locale, path, data);
+                this.broadcastUpdate(locale, path);
+                console.log(`Update completed for ${locale}/${path}`);
+            }
         } catch (error) {
-            this.updateQueue.add({locale, path});
             console.error(`Failed to process update for ${locale}/${path}:`, error);
         }
     }
@@ -112,29 +98,26 @@ export class UpdateWorker {
     broadcastUpdate(locale, path) {
         chrome.tabs.query({}, (tabs) => {
             tabs.forEach(tab => {
-                chrome.tabs.sendMessage(tab.id, {
-                    action: 'localeUpdated',
-                    locale: locale,
-                    path: path
-                });
+                try {
+                    chrome.tabs.sendMessage(tab.id, {
+                        action: 'localeUpdated',
+                        locale: locale,
+                        path: path
+                    }).catch(() => {});
+                } catch (error) {}
             });
         });
     }
 
     setupMessageListeners() {
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-            if (request.action === 'getLocaleData') {
-                this.handleGetLocaleData(request, sendResponse).then();
+            if (request.action === 'forceUpdate') {
+                console.log('Force update requested');
+                this.checkForUpdates().then(() => {
+                    sendResponse({success: true});
+                });
                 return true;
             }
         });
-    }
-
-    async handleGetLocaleData(request, sendResponse) {
-        const data = await StorageManager.get([
-            `locale_${request.locale}`,
-            `version_${request.locale}`
-        ]);
-        sendResponse(data);
     }
 }

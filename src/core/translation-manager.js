@@ -1,55 +1,47 @@
-import { TranslationLoader } from './translation-loader';
+import {TranslationLoader} from './translation-loader';
+import {LocaleManager} from './locale-manager';
+import {LocaleStorage} from '../utils/locale-storage';
 
 export class TranslationManager {
     constructor() {
-        this.currentLocale = 'en';
         this.translations = new Map();
-        this.initialized = false;
         this.translationLoader = new TranslationLoader();
-    }
-
-    async init(defaultLocale = 'en') {
-        this.currentLocale = defaultLocale;
-        this.initialized = true;
+        this.localeManager = new LocaleManager();
     }
 
     async load(currentPath) {
-        if (!this.initialized) {
-            throw new Error('TranslationManager not initialized');
+        await LocaleStorage.setCurrentPath(currentPath);
+        const currentLocale = await LocaleStorage.getCurrentLocale();
+        const translations = await this.translationLoader.load(currentLocale, currentPath);
+
+        if (translations?.page) {
+            this.setTranslations(translations.page, currentLocale);
         }
 
-        const translations = await this.translationLoader.load(this.currentLocale, currentPath);
-        this.setTranslations(translations.page);
         return translations;
     }
 
-    setTranslations(translations) {
-        if (!this.initialized) {
-            throw new Error('TranslationManager not initialized');
+    setTranslations(translations, locale) {
+        if (!this.translations.has(locale)) {
+            this.translations.set(locale, {strings: {}});
         }
 
-        if (!this.translations.has(this.currentLocale)) {
-            this.translations.set(this.currentLocale, {strings: {}});
-        }
-
-        const currentTranslations = this.translations.get(this.currentLocale);
+        const currentTranslations = this.translations.get(locale);
         currentTranslations.strings = {
             ...currentTranslations.strings,
             ...(translations.strings || translations)
         };
     }
 
-    translate(text, params = {}) {
-        if (!this.initialized || this.currentLocale === 'en') {
-            return text;
+    async translate(text, params = {}) {
+        const currentLocale = await LocaleStorage.getCurrentLocale();
+        const translations = this.translations.get(currentLocale);
+
+        if (!translations || currentLocale === 'en') {
+            return this.interpolate(text, params);
         }
 
-        const translations = this.translations.get(this.currentLocale);
-        if (!translations) {
-            return text;
-        }
-
-        const translation = translations['strings'][text] || text;
+        const translation = translations.strings[text] || text;
         return this.interpolate(translation, params);
     }
 
@@ -61,5 +53,6 @@ export class TranslationManager {
 
     clearCache() {
         this.translationLoader.clearCache();
+        this.translations.clear();
     }
 }

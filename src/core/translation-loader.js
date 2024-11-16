@@ -1,16 +1,18 @@
-import { CONFIG } from '../config';
-import { LocaleAPI } from '../utils/api';
-import { StorageManager } from '../utils/storage';
+import {LocaleManager} from './locale-manager';
+import {LocaleStorage} from '../utils/locale-storage';
 
 export class TranslationLoader {
     constructor() {
         this.translationCache = new Map();
-        this.pendingUpdates = new Map();
+        this.localeManager = new LocaleManager();
+        this.setupUpdateListener();
     }
 
     async load(locale, currentPath) {
         if (locale === 'en') {
-            return { page: {} };
+            return {
+                page: {}
+            };
         }
 
         const cacheKey = `${locale}_${currentPath}`;
@@ -19,92 +21,38 @@ export class TranslationLoader {
             return this.translationCache.get(cacheKey);
         }
 
-        const storedData = await StorageManager.getLocaleData(locale, currentPath);
+        const storedData = await LocaleStorage.getLocaleData(locale, currentPath);
         if (storedData?.data) {
-            this.translationCache.set(cacheKey, {
-                page: storedData.data
-            });
+            const translations = { page: storedData.data };
+            this.translationCache.set(cacheKey, translations);
 
-            if (!this.pendingUpdates.has(cacheKey)) {
-                this.pendingUpdates.set(cacheKey, true);
-                await this.checkForUpdatesInBackground(locale, currentPath);
-                this.pendingUpdates.delete(cacheKey);
-            }
-
-            return {
-                page: storedData.data
-            };
+            return translations;
         }
 
-        const translations = await this.fetchFromAPI(locale, currentPath);
-        await StorageManager.saveLocaleData(locale, currentPath, translations.page);
+        const translations = await this.localeManager.getLocaleData(locale, currentPath);
+        if (translations) {
+            await LocaleStorage.saveLocaleData(locale, currentPath, translations);
+            const result = { page: translations };
+            this.translationCache.set(cacheKey, result);
 
-        this.translationCache.set(cacheKey, translations);
-        return translations;
-    }
+            return result;
+        }
 
-    async fetchFromAPI(locale, currentPath) {
-        const bulkOptions = this.prepareBulkOptions(currentPath);
-        const response = await LocaleAPI.getBulkResources('website', locale, bulkOptions);
         return {
-            page: response.data
+            page: {}
         };
     }
 
-    prepareBulkOptions(currentPath) {
-        const bulkOptions = {
-            modules: [],
-            standalone: [],
-            includeCommon: true
-        };
-
-        const isStandalone = Object.values(CONFIG.PATHS.STANDALONE)
-            .some(path => currentPath.includes(path));
-
-        if (isStandalone) {
-            bulkOptions.standalone.push(currentPath);
-            bulkOptions.includeCommon = false;
-        } else {
-            bulkOptions.modules.push(currentPath);
-        }
-
-        if (bulkOptions.includeCommon) {
-            Object.values(CONFIG.PATHS.COMMON).forEach(path => {
-                if (path.startsWith('modules/')) {
-                    bulkOptions.modules.push(path.replace('modules/', ''));
-                }
-            });
-        }
-
-        return bulkOptions;
-    }
-
-    async checkForUpdatesInBackground(locale, currentPath) {
-        if (locale === 'en' || !navigator.onLine) return;
-
-        try {
-            const hasUpdate = await LocaleAPI.checkForUpdates(locale, currentPath);
-            if (hasUpdate) {
-                const newData = await this.fetchFromAPI(locale, currentPath);
-                await StorageManager.saveLocaleData(locale, currentPath, newData.page);
-
-                const cacheKey = `${locale}_${currentPath}`;
-                this.translationCache.set(cacheKey, newData);
-
-                chrome.runtime.sendMessage({
-                    action: 'localeUpdated',
-                    locale: locale,
-                    path: currentPath,
-                    data: newData
-                });
+    setupUpdateListener() {
+        chrome.runtime.onMessage.addListener((message) => {
+            if (message.action === 'localeUpdated') {
+                const cacheKey = `${message.locale}_${message.path}`;
+                this.translationCache.delete(cacheKey);
             }
-        } catch (error) {
-            console.error('Failed to check for updates:', error);
-        }
+        });
     }
 
     clearCache() {
         this.translationCache.clear();
-        this.pendingUpdates.clear();
     }
 }

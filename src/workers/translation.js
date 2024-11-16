@@ -5,15 +5,17 @@ export class TranslationWorker {
     }
 
     setupWorker() {
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        const listener = (message, sender, sendResponse) => {
             if (message.type === 'TRANSLATE') {
                 const { nodes, translations } = message.data;
                 const processedNodes = this.processNodes(nodes, translations);
                 sendResponse({ processedNodes });
             }
-
             return true;
-        });
+        };
+
+        chrome.runtime.onMessage.addListener(listener);
+        return () => chrome.runtime.onMessage.removeListener(listener);
     }
 
     processNodes(nodes, translations) {
