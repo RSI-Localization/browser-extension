@@ -2,168 +2,199 @@ import {LocaleStorage} from "../utils/locale-storage";
 
 export class DOMManager {
     constructor() {
-        this.excludeTags = ['SCRIPT', 'STYLE', 'CODE', 'PRE', 'IFRAME'];
-        this.localizableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
-        this.processedNodes = new WeakSet();
-        this.mutationObserver = null;
-        this.processingQueue = new Set();
+        this.excludeSelectors = [
+            'script', 'style', 'code', 'pre', 'iframe',
+            '[data-no-translate]', // Custom attribute to skip translation
+        ].join(',');
+
+        this.translatableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
+        this.translationCache = new Map();
+        this.observer = null;
+        this.textProcessor = null;
+        this.translationManager = null;
     }
 
     async load(textProcessor, translationManager) {
-        await this.processElement(document.body, textProcessor, translationManager);
-        this.observeMutations((nodes) => {
-            this.processNodes(nodes, textProcessor, translationManager);
-        });
+        this.textProcessor = textProcessor;
+        this.translationManager = translationManager;
+
+        await this.translateVisibleContent();
+        this.setupIntersectionObserver();
+        this.setupMutationObserver();
+        this.setupRouteChangeListener();
     }
 
-    async processNodes(nodes, textProcessor, translationManager) {
-        for (const node of nodes) {
-            if (!this.processingQueue.has(node)) {
-                this.processingQueue.add(node);
-                await this.processElement(node, textProcessor, translationManager);
-                this.processingQueue.delete(node);
-            }
-        }
-    }
-
-    async processElement(element, textProcessor, translationManager) {
-        if (!element || this.processedNodes.has(element)) return;
-
-        const nodesToProcess = this.collectNodes(element);
-        const currentLocale = await LocaleStorage.getCurrentLocale();
-
-        if (currentLocale === 'en') {
-            this.processedNodes.add(element);
-            return;
-        }
-
-        for (const node of nodesToProcess) {
-            if (node.nodeType === Node.TEXT_NODE) {
-                const originalText = node.textContent.trim();
-                if (originalText) {
-                    const processed = textProcessor.processText(originalText);
-                    const translatedPattern = await translationManager.translate(processed.pattern);
-                    const translatedText = textProcessor.restoreText(translatedPattern, processed.tokens);
-                    this.applyTranslation(node, originalText, translatedText);
-                }
-            }
-
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                await this.processAttributes(node, textProcessor, translationManager);
-            }
-
-            this.processedNodes.add(node);
-        }
-    }
-
-    async processAttributes(node, textProcessor, translationManager) {
-        for (const attr of this.localizableAttributes) {
-            if (node.hasAttribute(attr)) {
-                const originalValue = node.getAttribute(attr);
-                const processed = textProcessor.processText(originalValue);
-                const translatedPattern = await translationManager.translate(processed.pattern);
-                const translatedValue = textProcessor.restoreText(translatedPattern, processed.tokens);
-                node.setAttribute(attr, translatedValue);
-            }
-        }
-    }
-
-    collectNodes(element) {
-        const nodes = [];
-        const walker = document.createTreeWalker(
-            element,
-            NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
-            {
-                acceptNode: (node) => {
-                    if (this.processedNodes.has(node)) return NodeFilter.FILTER_REJECT;
-                    if (this.shouldExcludeNode(node)) return NodeFilter.FILTER_REJECT;
-                    return NodeFilter.FILTER_ACCEPT;
-                }
-            }
+    async translateVisibleContent() {
+        const elements = document.body.querySelectorAll(`*:not(${this.excludeSelectors})`);
+        const visibleElements = Array.from(elements).filter(el =>
+            !el.closest(this.excludeSelectors) && this.isElementVisible(el)
         );
 
-        let node;
-        while (node = walker.nextNode()) {
-            nodes.push(node);
-        }
-
-        return nodes;
+        await Promise.all(visibleElements.map(el => this.translateElement(el)));
     }
 
-    shouldExcludeNode(node) {
-        if (node.nodeType === Node.TEXT_NODE) {
-            return !node.textContent.trim() || !(/\S/.test(node.textContent));
-        }
-
-        if (node.nodeType === Node.ELEMENT_NODE) {
-            return this.excludeTags.includes(node.tagName.toUpperCase());
-        }
-
-        return true;
-    }
-
-    applyTranslation(node, originalText, translatedText) {
-        if (originalText === translatedText) return;
-
-        const parent = node.parentNode;
-        if (parent.childNodes.length === 1) {
-            parent.classList.add('localized');
-            parent.dataset.originalText = originalText;
-            node.textContent = translatedText;
-            return;
-        }
-
-        const span = document.createElement('span');
-        span.classList.add('localized');
-        span.dataset.originalText = originalText;
-        span.textContent = translatedText;
-        node.parentNode.replaceChild(span, node);
-    }
-
-    observeMutations(callback) {
-        this.mutationObserver = new MutationObserver((mutations) => {
-            const nodesToProcess = new Set();
-
-            mutations.forEach(mutation => {
-                if (mutation.type === 'characterData') {
-                    const textNode = mutation.target;
-                    if (!this.shouldExcludeNode(textNode)) {
-                        this.processedNodes.delete(textNode);
-                        nodesToProcess.add(textNode);
-                    }
+    setupIntersectionObserver() {
+        const observer = new IntersectionObserver(async (entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting && !entry.target.hasAttribute('data-translated')) {
+                    await this.translateElement(entry.target);
                 }
+            }
+        }, { rootMargin: '50px' });
 
-                if (mutation.type === 'childList' || mutation.type === 'subtree') {
-                    mutation.target.querySelectorAll('.localized').forEach(node => {
-                        const currentText = node.textContent;
-                        const originalText = node.dataset.originalText;
+        this.observeNewElements(observer);
+    }
 
-                        if (currentText !== originalText) {
-                            this.processedNodes.delete(node);
-                            nodesToProcess.add(node);
+    setupMutationObserver() {
+        const observer = new MutationObserver(async (mutations) => {
+            const changes = new Set();
+
+            for (const mutation of mutations) {
+                if (mutation.addedNodes.length) {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            changes.add(this.translateElement(node));
                         }
                     });
                 }
 
-                mutation.addedNodes.forEach(node => {
-                    if (!this.shouldExcludeNode(node)) {
-                        nodesToProcess.add(node);
-                    }
-                });
-            });
+                if (mutation.type === 'characterData' && !this.isExcluded(mutation.target)) {
+                    changes.add(this.translateTextNode(mutation.target));
+                }
 
-            if (nodesToProcess.size > 0) {
-                callback(Array.from(nodesToProcess));
+                if (mutation.type === 'attributes' &&
+                    this.translatableAttributes.includes(mutation.attributeName)) {
+                    changes.add(this.translateAttributes(mutation.target));
+                }
             }
+
+            await Promise.all(changes);
         });
 
-        this.mutationObserver.observe(document.body, {
+        observer.observe(document.body, {
             childList: true,
             subtree: true,
             characterData: true,
-            characterDataOldValue: true,
-            attributes: true,           // 속성 변경 감지 추가
-            attributeOldValue: true     // 이전 속성값 저장
+            attributes: true,
+            attributeFilter: this.translatableAttributes
         });
+
+        this.observer = observer;
+    }
+
+    setupRouteChangeListener() {
+        // Handle HTML5 History API
+        const originalPushState = history.pushState;
+        history.pushState = (...args) => {
+            originalPushState.apply(history, args);
+            this.handleRouteChange().then();
+        };
+
+        window.addEventListener('popstate', () => this.handleRouteChange());
+
+        window.addEventListener('hashchange', () => this.handleRouteChange());
+    }
+
+    async handleRouteChange() {
+        this.translationCache.clear();
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        await this.translateVisibleContent();
+    }
+
+    async translateElement(element) {
+        if (this.isExcluded(element)) return;
+
+        const textNodes = this.getTextNodes(element);
+        await Promise.all(textNodes.map(node => this.translateTextNode(node)));
+
+        await this.translateAttributes(element);
+
+        element.setAttribute('data-translated', 'true');
+    }
+
+    async translateTextNode(node) {
+        const text = node.textContent.trim();
+        if (!text) return;
+
+        const cacheKey = `text:${text}`;
+        if (!this.translationCache.has(cacheKey)) {
+            const processed = this.textProcessor.processText(text);
+            const translated = await this.translationManager.translate(processed.pattern);
+            this.translationCache.set(cacheKey, translated);
+        }
+
+        const translation = this.translationCache.get(cacheKey);
+        if (translation !== text) {
+            node.textContent = translation;
+        }
+    }
+
+    async translateAttributes(element) {
+        for (const attr of this.translatableAttributes) {
+            if (!element.hasAttribute(attr)) continue;
+
+            const value = element.getAttribute(attr);
+            const cacheKey = `attr:${attr}:${value}`;
+
+            if (!this.translationCache.has(cacheKey)) {
+                const processed = this.textProcessor.processText(value);
+                const translated = await this.translationManager.translate(processed.pattern);
+                this.translationCache.set(cacheKey, translated);
+            }
+
+            const translation = this.translationCache.get(cacheKey);
+            if (translation !== value) {
+                element.setAttribute(attr, translation);
+            }
+        }
+    }
+
+    isExcluded(node) {
+        return node.closest?.(this.excludeSelectors);
+    }
+
+    isElementVisible(element) {
+        return element.offsetParent !== null;
+    }
+
+    getTextNodes(element) {
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: (node) => {
+                    return node.textContent.trim() && !this.isExcluded(node.parentElement)
+                        ? NodeFilter.FILTER_ACCEPT
+                        : NodeFilter.FILTER_REJECT;
+                }
+            }
+        );
+
+        const nodes = [];
+        let node;
+        while (node = walker.nextNode()) {
+            nodes.push(node);
+        }
+        return nodes;
+    }
+
+    observeNewElements(observer) {
+        document.querySelectorAll(`*:not(${this.excludeSelectors})`).forEach(el => {
+            if (!el.closest(this.excludeSelectors)) {
+                observer.observe(el);
+            }
+        });
+
+        new MutationObserver((mutations) => {
+            mutations.forEach(mutation => {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === Node.ELEMENT_NODE && !this.isExcluded(node)) {
+                        observer.observe(node);
+                    }
+                });
+            });
+        }).observe(document.body, { childList: true, subtree: true });
     }
 }
