@@ -4,55 +4,87 @@ import {LocaleStorage} from '../utils/locale-storage';
 export class TranslationLoader {
     constructor() {
         this.translationCache = new Map();
+        this.commonCache = new Map();
         this.localeManager = new LocaleManager();
-        this.setupUpdateListener();
     }
 
     async load(locale, currentPath) {
         if (locale === 'en') {
-            return {
-                page: {}
-            };
+            return { page: {} };
         }
 
-        const cacheKey = `${locale}_${currentPath}`;
+        const pathParts = currentPath.split('/').filter(Boolean);
+        const section = pathParts[0] || 'main';
+        const cacheKey = `${locale}_${section}_${currentPath}`;
 
         if (this.translationCache.has(cacheKey)) {
-            return this.translationCache.get(cacheKey);
-        }
-
-        const storedData = await LocaleStorage.getLocaleData(locale, currentPath);
-        if (storedData?.data) {
-            const translations = { page: storedData.data };
-            this.translationCache.set(cacheKey, translations);
-
-            return translations;
+            const cached = this.translationCache.get(cacheKey);
+            return {
+                page: {
+                    data: cached.data,
+                    version: cached.version
+                }
+            };
         }
 
         const translations = await this.localeManager.getLocaleData(locale, currentPath);
         if (translations) {
-            await LocaleStorage.saveLocaleData(locale, currentPath, translations);
-            const result = { page: translations };
-            this.translationCache.set(cacheKey, result);
+            this.translationCache.set(cacheKey, {
+                data: translations.data,
+                version: translations.version
+            });
+            return {
+                page: {
+                    data: translations.data,
+                    version: translations.version
+                }
+            };
+        }
 
-            return result;
+        return { page: {} };
+    }
+
+    async loadCommonTranslations(locale) {
+        if (this.commonCache.has(locale)) {
+            const cached = this.commonCache.get(locale);
+            return {
+                data: cached.data,
+                version: cached.version
+            };
+        }
+
+        const storedData = await LocaleStorage.getCommonTranslations(locale);
+        if (storedData) {
+            this.commonCache.set(locale, {
+                data: storedData.data,
+                version: storedData.version
+            });
+            return {
+                data: storedData.data,
+                version: storedData.version
+            };
+        }
+
+        const translations = await this.localeManager.loadCommonTranslations(locale);
+        if (translations) {
+            this.commonCache.set(locale, {
+                data: translations.data,
+                version: translations.version
+            });
+            return {
+                data: translations.data,
+                version: translations.version
+            };
         }
 
         return {
-            page: {}
+            data: {},
+            version: null
         };
-    }
-
-    setupUpdateListener() {
-        chrome.runtime.onMessage.addListener((message) => {
-            if (message.action === 'localeUpdated') {
-                const cacheKey = `${message.locale}_${message.path}`;
-                this.translationCache.delete(cacheKey);
-            }
-        });
     }
 
     clearCache() {
         this.translationCache.clear();
+        this.commonCache.clear();
     }
 }

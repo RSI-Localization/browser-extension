@@ -2,6 +2,8 @@ export class LocaleStorage {
     static METADATA_KEY = 'global_metadata';
     static LOCALE_PREFERENCE_KEY = 'locale_preference';
     static CURRENT_PATH_KEY = 'current_path';
+    static COMMON_TRANSLATIONS_KEY = 'common_translations';
+    static VERSION_DATA_KEY = 'version_data';
 
     static async get(keys) {
         return new Promise((resolve) => {
@@ -22,12 +24,40 @@ export class LocaleStorage {
     }
 
     static getStorageKey(locale, path) {
-        return `locale_${locale}_${path.replace(/\//g, '_')}`;
+        const section = path.split('/').filter(Boolean)[0] || 'main';
+        return `locale_${locale}_${section}_${path.replace(/\//g, '_')}`;
     }
 
     static async getCurrentVersion(locale, path) {
         const data = await this.getLocaleData(locale, path);
-        return data?.metadata?.version || null;
+        return data?.version || null;
+    }
+
+    static async getVersionData() {
+        const data = await this.get(this.VERSION_DATA_KEY);
+        return data[this.VERSION_DATA_KEY];
+    }
+
+    static async saveVersionData(data) {
+        await this.set({ [this.VERSION_DATA_KEY]: data });
+    }
+
+    static async getCommonTranslations(locale) {
+        const key = `${this.COMMON_TRANSLATIONS_KEY}_${locale}`;
+        const data = await this.get(key);
+        return data[key];
+    }
+
+    static async saveCommonTranslations(locale, data, version) {
+        const key = `${this.COMMON_TRANSLATIONS_KEY}_${locale}`;
+        await this.set({
+            [key]: {
+                data: data,
+                version: version,
+                language: locale,
+                updatedAt: new Date().toISOString()
+            }
+        });
     }
 
     static async getLocaleData(locale, path) {
@@ -58,19 +88,15 @@ export class LocaleStorage {
         });
     }
 
-
     static async saveLocaleData(locale, path, data) {
         const key = this.getStorageKey(locale, path);
-        const metadata = {
-            version: data.version,
-            updatedAt: new Date().toISOString(),
-            path: path
-        };
-
         await this.set({
             [key]: {
                 data: data,
-                metadata: metadata
+                version: data.version,
+                language: locale,
+                updatedAt: new Date().toISOString(),
+                path: path
             }
         });
     }
@@ -92,7 +118,12 @@ export class LocaleStorage {
     static async needsUpdate(newMetadata) {
         const currentMetadata = await this.getGlobalMetadata();
         if (!currentMetadata) return true;
-
         return currentMetadata.generated !== newMetadata.generated;
+    }
+
+    static async clear() {
+        return new Promise((resolve) => {
+            chrome.storage.local.clear(resolve);
+        });
     }
 }
