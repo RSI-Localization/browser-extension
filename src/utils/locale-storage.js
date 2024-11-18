@@ -39,7 +39,12 @@ export class LocaleStorage {
     }
 
     static async saveVersionData(data) {
-        await this.set({ [this.VERSION_DATA_KEY]: data });
+        const versionData = {
+            data: data.data,
+            timestamp: data.timestamp || Date.now(),
+            updatedAt: new Date().toISOString()
+        };
+        await this.set({ [this.VERSION_DATA_KEY]: versionData });
     }
 
     static async getCommonTranslations(locale) {

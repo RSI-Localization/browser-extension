@@ -30,22 +30,34 @@ export class LocaleAPI {
         return this.fetchJSON(this.buildUrl('localization/website/languages'));
     }
 
-    static async getCommonResources(serviceId, locale) {
-        return this.fetchJSON(
-            this.buildUrl(`localization/website/${locale}/common`)
-        );
-    }
-
     static async getModuleResources(locale, path) {
-        return this.fetchJSON(
+        const response = await this.fetchJSON(
             this.buildUrl(`localization/website/${locale}/modules${path}`)
         );
+        return {
+            data: response.data,
+            version: response.version
+        };
+    }
+
+    static async getCommonResources(serviceId, locale) {
+        const response = await this.fetchJSON(
+            this.buildUrl(`localization/website/${locale}/common`)
+        );
+        return {
+            data: response.data,
+            version: response.version
+        };
     }
 
     static async getStandaloneResources(locale, path) {
-        return this.fetchJSON(
+        const response = await this.fetchJSON(
             this.buildUrl(`localization/website/${locale}/standalone${path}`)
         );
+        return {
+            data: response.data,
+            version: response.version
+        };
     }
 
     static async getBulkResources(locale, options) {
@@ -55,12 +67,17 @@ export class LocaleAPI {
             includeCommon: options.includeCommon || false
         };
 
-        return this.fetchJSON(
+        const response = await this.fetchJSON(
             this.buildUrl(`localization/website/${locale}/bulk`),
             {
                 method: 'POST',
                 body: JSON.stringify(requestBody)
             }
         );
+
+        return {
+            data: response.data,
+            version: response.version
+        };
     }
 }

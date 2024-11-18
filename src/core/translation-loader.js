@@ -10,7 +10,7 @@ export class TranslationLoader {
 
     async load(locale, currentPath) {
         if (locale === 'en') {
-            return { page: {} };
+            return { page: { data: {} } };
         }
 
         const pathParts = currentPath.split('/').filter(Boolean);
@@ -20,61 +20,44 @@ export class TranslationLoader {
         if (this.translationCache.has(cacheKey)) {
             const cached = this.translationCache.get(cacheKey);
             return {
-                page: {
-                    data: cached.data,
-                    version: cached.version
-                }
+                page: cached
             };
         }
 
         const translations = await this.localeManager.getLocaleData(locale, currentPath);
         if (translations) {
-            this.translationCache.set(cacheKey, {
-                data: translations.data,
+            const translationData = {
+                data: translations,
                 version: translations.version
-            });
+            };
+            this.translationCache.set(cacheKey, translationData);
+
             return {
-                page: {
-                    data: translations.data,
-                    version: translations.version
-                }
+                page: translationData
             };
         }
 
-        return { page: {} };
+        return {
+            page: {
+                data: {},
+                version: null
+            }
+        };
     }
 
     async loadCommonTranslations(locale) {
         if (this.commonCache.has(locale)) {
-            const cached = this.commonCache.get(locale);
-            return {
-                data: cached.data,
-                version: cached.version
-            };
-        }
-
-        const storedData = await LocaleStorage.getCommonTranslations(locale);
-        if (storedData) {
-            this.commonCache.set(locale, {
-                data: storedData.data,
-                version: storedData.version
-            });
-            return {
-                data: storedData.data,
-                version: storedData.version
-            };
+            return this.commonCache.get(locale);
         }
 
         const translations = await this.localeManager.loadCommonTranslations(locale);
         if (translations) {
-            this.commonCache.set(locale, {
-                data: translations.data,
-                version: translations.version
-            });
-            return {
+            const commonData = {
                 data: translations.data,
                 version: translations.version
             };
+            this.commonCache.set(locale, commonData);
+            return commonData;
         }
 
         return {

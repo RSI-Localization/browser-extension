@@ -1,6 +1,8 @@
 export class PathValidator {
     static paths = null;
     static versionData = null;
+    static versionTimestamp = null;
+    static VERSION_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
     static setPathData(pathData) {
         this.paths = {
@@ -11,8 +13,15 @@ export class PathValidator {
         };
     }
 
-    static setVersionData(data) {
+    static setVersionData(data, timestamp = Date.now()) {
         this.versionData = data;
+        this.versionTimestamp = timestamp;
+    }
+
+    static isVersionCacheValid() {
+        return this.versionData &&
+            this.versionTimestamp &&
+            (Date.now() - this.versionTimestamp < this.VERSION_CACHE_DURATION);
     }
 
     static getPathType(path) {
@@ -40,13 +49,15 @@ export class PathValidator {
     }
 
     static validatePath(path) {
+        if (!this.versionData) return false;
+
         const section = this.getSectionFromPath(path);
         const moduleData = this.versionData?.languages?.ko?.website?.modules?.[section];
 
         if (!moduleData) return false;
 
         const pathParts = path.split('/').filter(Boolean);
-        pathParts.shift(); // Remove section
+        pathParts.shift();
 
         while (pathParts.length >= 0) {
             const currentPath = '/' + pathParts.join('/');
@@ -64,6 +75,8 @@ export class PathValidator {
     }
 
     static getVersionForPath(locale, path) {
+        if (!this.versionData) return null;
+
         const section = this.getSectionFromPath(path);
         const serviceData = this.versionData?.languages?.[locale]?.website;
 
@@ -73,7 +86,7 @@ export class PathValidator {
         if (!sectionData?.files) return null;
 
         const pathParts = path.split('/').filter(Boolean);
-        pathParts.shift(); // Remove section
+        pathParts.shift();
 
         while (pathParts.length >= 0) {
             const currentPath = '/' + pathParts.join('/');
@@ -88,5 +101,10 @@ export class PathValidator {
         }
 
         return sectionData.version;
+    }
+
+    static clearCache() {
+        this.versionData = null;
+        this.versionTimestamp = null;
     }
 }
