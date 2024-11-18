@@ -7,6 +7,28 @@ export class TranslationManager {
         this.translations = new Map();
         this.translationLoader = new TranslationLoader();
         this.localeManager = new LocaleManager();
+        this.setupUpdateListener();
+    }
+
+    setupUpdateListener() {
+        document.addEventListener('translationUpdated', async (event) => {
+            const { locale, path } = event.detail;
+            await this.handleTranslationUpdate(locale, path);
+        });
+    }
+
+    async handleTranslationUpdate(locale, path) {
+        const translations = await this.translationLoader.load(locale, path);
+        if (translations?.page) {
+            this.setTranslations(translations.page, locale);
+            this.notifyTranslationUpdate(locale, path);
+        }
+    }
+
+    notifyTranslationUpdate(locale, path) {
+        document.dispatchEvent(new CustomEvent('translationsRefreshed', {
+            detail: { locale, path }
+        }));
     }
 
     async load(currentPath) {

@@ -32,7 +32,7 @@ export class LanguageDropdown {
                     if (node.classList?.contains('o-localizationPopover')) {
                         if (node.getAttribute('data-orion-theme')) return;
                         this.injectLanguageButtons(node);
-                        this.updateToolbarLanguageDisplay(this.CURRENT_LOCALE);
+                        this.updateToolbarLanguageDisplay(this.currentLocale);
                     }
                 });
             });

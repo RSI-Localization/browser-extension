@@ -8,6 +8,7 @@ export class LocaleManager {
     constructor() {
         this.currentLocale = null;
         this.pathData = null;
+        this.updateInProgress = false;
     }
 
     async load() {
@@ -21,6 +22,74 @@ export class LocaleManager {
         }
 
         await this.initializePaths();
+    }
+
+    async checkForUpdates() {
+        if (this.updateInProgress) {
+            console.log('Update already in progress');
+            return;
+        }
+
+        console.log('Starting update check');
+        this.updateInProgress = true;
+
+        try {
+            const currentLocale = await LocaleStorage.getCurrentLocale();
+
+            if (currentLocale === 'en') {
+                console.log('English locale detected, skipping update check');
+                return;
+            }
+
+            if (!navigator.onLine) {
+                console.log('No internet connection');
+                return;
+            }
+
+            const versionData = await LocaleAPI.getVersionData();
+            const needsUpdate = await LocaleStorage.needsUpdate(versionData);
+
+            if (needsUpdate) {
+                console.log('Updates available, processing...');
+                await this.initializePaths();
+                await LocaleStorage.saveGlobalMetadata(versionData);
+                await this.updateCurrentLocale();
+            } else {
+                console.log('No updates needed');
+            }
+        } catch (error) {
+            console.error('Update check failed:', error);
+        } finally {
+            this.updateInProgress = false;
+        }
+    }
+
+    async updateCurrentLocale() {
+        const currentLocale = await LocaleStorage.getCurrentLocale();
+        const currentPath = await LocaleStorage.getCurrentPath();
+
+        if (!currentLocale || !currentPath) {
+            console.log('No locale or path information available');
+            return;
+        }
+
+        await this.processUpdate(currentLocale, currentPath);
+    }
+
+    async processUpdate(locale, path) {
+        try {
+            console.log(`Processing update for ${locale}/${path}`);
+            const data = await this.getLocaleData(locale, path);
+            if (data) {
+                await LocaleStorage.saveLocaleData(locale, path, data);
+                document.dispatchEvent(new CustomEvent('translationUpdated', {
+                    detail: { locale, path }
+                }));
+                console.log(`Update completed for ${locale}/${path}`);
+            }
+        } catch (error) {
+            console.error(`Failed to process update for ${locale}/${path}:`, error);
+        }
     }
 
     async initializePaths() {

@@ -30,20 +30,6 @@ export class LocaleAPI {
         return this.fetchJSON(this.buildUrl('localization/website/languages'));
     }
 
-    static async getModuleVersion(locale, path) {
-        const data = await this.fetchJSON(
-            this.buildUrl(`localization/website/${locale}/modules${path}/version`)
-        );
-        return data.version || null;
-    }
-
-    static async getStandaloneVersion(locale, path) {
-        const data = await this.fetchJSON(
-            this.buildUrl(`localization/website/${locale}/modules${path}/version`)
-        );
-        return data.version || null;
-    }
-
     static async getCommonResources(serviceId, locale) {
         return this.fetchJSON(
             this.buildUrl(`localization/website/${locale}/common`)

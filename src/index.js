@@ -17,6 +17,7 @@ export class Main {
             languageDropdown: new LanguageDropdown()
         };
         this.initialized = false;
+        this.updateInterval = null;
     }
 
     async init() {
@@ -39,6 +40,9 @@ export class Main {
                 );
             }
 
+            this.setupUpdateCheck();
+            await this.components.localeManager.checkForUpdates();
+
             this.initialized = true;
             console.log('✅ RSI localization initialized');
             console.log('🌐 Current locale:', currentLocale);
@@ -48,31 +52,25 @@ export class Main {
         }
     }
 
-    async initializeComponents() {
-        const {localeManager, languageDropdown} = this.components;
+    setupUpdateCheck() {
+        const intervalMs = CONFIG.UPDATE_INTERVAL_HOURS * 60 * 60 * 1000;
+        this.updateInterval = setInterval(() => {
+            this.components.localeManager.checkForUpdates().then();
+        }, intervalMs);
 
-        await localeManager.load();
-        await languageDropdown.init();
-
-        this.setupEventListeners();
-    }
-
-    async setupLocalization() {
-        const {translationManager, textProcessor, domManager} = this.components;
-
-        await this.waitForDOM();
-        await translationManager.load(window.location.pathname);
-
-        const currentLocale = await LocaleStorage.getCurrentLocale();
-        if (currentLocale !== 'en') {
-            await domManager.load(textProcessor, translationManager);
-        }
+        document.addEventListener('translationsRefreshed', async () => {
+            await this.components.domManager.load(
+                this.components.textProcessor,
+                this.components.translationManager
+            );
+        });
     }
 
     setupEventListeners() {
         const {translationManager, languageDropdown} = this.components;
 
         languageDropdown.onLocaleChange(async (locale) => {
+            await LocaleStorage.setCurrentLocale(locale);
             await translationManager.load(window.location.pathname);
         });
 
