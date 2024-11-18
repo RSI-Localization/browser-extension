@@ -1,13 +1,16 @@
 import QuickLRU from 'quick-lru';
+import { TextProcessor } from './text-processor';
+import { TranslationManager } from './translation-manager';
 
 export class DOMManager {
     constructor() {
         this.excludeSelectors = [
-            'script', 'style', 'code', 'pre', 'iframe'
+            'script', 'style', 'code', 'pre', 'iframe', 'img', 'video'
         ].join(',');
 
         this.translatableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
         this.translationCache = new QuickLRU({ maxSize: 2000 });
+        this.processedElements = new WeakSet();
         this.textProcessor = null;
         this.translationManager = null;
         this.batchSize = 50;
@@ -42,7 +45,7 @@ export class DOMManager {
             const visibleElements = entries
                 .filter(entry => entry.isIntersecting)
                 .map(entry => entry.target)
-                .filter(el => !el.hasAttribute('data-translated'));
+                .filter(el => !this.processedElements.has(el));
 
             for (let i = 0; i < visibleElements.length; i += this.batchSize) {
                 const batch = visibleElements.slice(i, i + this.batchSize);
@@ -70,6 +73,7 @@ export class DOMManager {
                 if (mutation.type === 'characterData' && !this.isExcluded(mutation.target)) {
                     const cacheKey = this.getCacheKey(mutation.target.textContent);
                     this.translationCache.delete(cacheKey);
+                    this.processedElements.delete(mutation.target.parentElement);
                     changes.add(mutation.target.parentElement);
                 }
 
@@ -77,6 +81,7 @@ export class DOMManager {
                     this.translatableAttributes.includes(mutation.attributeName)) {
                     const cacheKey = this.getCacheKey(mutation.target.getAttribute(mutation.attributeName));
                     this.translationCache.delete(cacheKey);
+                    this.processedElements.delete(mutation.target);
                     changes.add(mutation.target);
                 }
             }
@@ -112,13 +117,14 @@ export class DOMManager {
     }
 
     async handleRouteChange() {
+        this.processedElements = new WeakSet();
         this.translationCache.clear();
         await new Promise(resolve => setTimeout(resolve, 100));
         await this.processVisibleContent();
     }
 
     async translateElement(element) {
-        if (this.isExcluded(element)) return;
+        if (this.processedElements.has(element) || this.isExcluded(element)) return;
 
         const textNodes = this.getTextNodes(element);
         await Promise.all([
@@ -126,7 +132,8 @@ export class DOMManager {
             this.translateAttributes(element)
         ]);
 
-        element.setAttribute('data-translated', 'true');
+        this.processedElements.add(element);
+        element.setAttribute('rsi-localization', '');
     }
 
     async translateTextNode(node) {
@@ -143,8 +150,11 @@ export class DOMManager {
         }
 
         if (translation !== text) {
+            node.parentElement.dataset.originalText = text;
             node.textContent = translation;
         }
+
+        console.log(`Translated text: ${text} -> ${translation}`);
     }
 
     async translateAttributes(element) {
