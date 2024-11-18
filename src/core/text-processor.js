@@ -24,7 +24,7 @@ export class TextProcessor {
                     return value;
                 }
             }
-        });
+        }).then();
     }
 
     normalizeQuotations(text) {

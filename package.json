@@ -18,6 +18,7 @@
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
-    "i18next": "^23.16.4"
+    "i18next": "^23.16.4",
+    "quick-lru": "^7.0.0"
   }
 }
