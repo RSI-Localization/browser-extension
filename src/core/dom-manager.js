@@ -63,6 +63,23 @@ export class DOMManager {
             const changes = new Set();
 
             for (const mutation of mutations) {
+                if (mutation.type === 'characterData' && !this.isExcluded(mutation.target)) {
+                    const oldText = mutation.oldValue?.trim();
+                    const newText = mutation.target.textContent?.trim();
+
+                    // 텍스트가 실제로 변경된 경우 처리
+                    if (oldText !== newText) {
+                        const parentElement = mutation.target.parentElement;
+                        // 캐시 삭제 및 재처리 표시
+                        if (parentElement) {
+                            const cacheKey = this.getCacheKey(newText);
+                            this.translationCache.delete(cacheKey);
+                            this.processedElements.delete(parentElement);
+                            changes.add(parentElement);
+                        }
+                    }
+                }
+
                 if (mutation.addedNodes.length) {
                     mutation.addedNodes.forEach(node => {
                         if (node.nodeType === Node.ELEMENT_NODE && !this.isExcluded(node)) {
@@ -70,28 +87,23 @@ export class DOMManager {
                         }
                     });
                 }
-
-                if (mutation.type === 'characterData' && !this.isExcluded(mutation.target)) {
-                    const cacheKey = this.getCacheKey(mutation.target.textContent);
-                    this.translationCache.delete(cacheKey);
-                    this.processedElements.delete(mutation.target.parentElement);
-                    changes.add(mutation.target.parentElement);
-                }
-
-                if (mutation.type === 'attributes' &&
-                    this.translatableAttributes.includes(mutation.attributeName)) {
-                    const cacheKey = this.getCacheKey(mutation.target.getAttribute(mutation.attributeName));
-                    this.translationCache.delete(cacheKey);
-                    this.processedElements.delete(mutation.target);
-                    changes.add(mutation.target);
-                }
             }
 
             const elementsToTranslate = Array.from(changes);
-            for (let i = 0; i < elementsToTranslate.length; i += this.batchSize) {
-                const batch = elementsToTranslate.slice(i, i + this.batchSize);
-                await Promise.all(batch.map(el => this.translateElement(el)));
-                await new Promise(resolve => setTimeout(resolve, this.batchDelay));
+            if (elementsToTranslate.length > 0) {
+                console.log('🔄 Processing text changes:', {
+                    count: elementsToTranslate.length,
+                    elements: elementsToTranslate.map(el => ({
+                        text: el.textContent?.trim(),
+                        type: el.nodeType === Node.ELEMENT_NODE ? 'Element' : 'Text'
+                    }))
+                });
+
+                for (let i = 0; i < elementsToTranslate.length; i += this.batchSize) {
+                    const batch = elementsToTranslate.slice(i, i + this.batchSize);
+                    await Promise.all(batch.map(el => this.translateElement(el)));
+                    await new Promise(resolve => setTimeout(resolve, this.batchDelay));
+                }
             }
         });
 
@@ -100,7 +112,8 @@ export class DOMManager {
             subtree: true,
             characterData: true,
             attributes: true,
-            attributeFilter: this.translatableAttributes
+            attributeFilter: this.translatableAttributes,
+            characterDataOldValue: true
         });
 
         this.observer = observer;
