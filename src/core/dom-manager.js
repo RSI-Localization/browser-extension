@@ -15,6 +15,7 @@ export class DOMManager {
         this.translationManager = null;
         this.batchSize = 50;
         this.batchDelay = 16;
+        this.observer = null;
     }
 
     async load(textProcessor, translationManager) {
@@ -153,8 +154,6 @@ export class DOMManager {
             node.parentElement.dataset.originalText = text;
             node.textContent = translation;
         }
-
-        console.log(`Translated text: ${text} -> ${translation}`);
     }
 
     async translateAttributes(element) {
