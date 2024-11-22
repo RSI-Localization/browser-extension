@@ -1,6 +1,4 @@
 import QuickLRU from 'quick-lru';
-import { TextProcessor } from './text-processor';
-import { TranslationManager } from './translation-manager';
 
 export class DOMManager {
     constructor() {
@@ -25,7 +23,7 @@ export class DOMManager {
         ];
 
         this.translatableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
-        this.translationCache = new QuickLRU({ maxSize: 2000 });
+        this.translationCache = new QuickLRU({ maxSize: 2048 });
         this.processedElements = new WeakSet();
         this.textProcessor = null;
         this.translationManager = null;
@@ -76,38 +74,23 @@ export class DOMManager {
 
     setupMutationObserver() {
         const observer = new MutationObserver(async (mutations) => {
-            const changes = new Set();
-
             for (const mutation of mutations) {
                 if (mutation.addedNodes.length) {
                     mutation.addedNodes.forEach(node => {
                         if (node.nodeType === Node.ELEMENT_NODE && !this.isExcluded(node)) {
-                            changes.add(node);
+                            this.translateElement(node);
                         }
                     });
                 }
 
                 if (mutation.type === 'characterData' && !this.isExcluded(mutation.target)) {
-                    const cacheKey = this.getCacheKey(mutation.target.textContent);
-                    this.translationCache.delete(cacheKey);
-                    this.processedElements.delete(mutation.target.parentElement);
-                    changes.add(mutation.target.parentElement);
+                    await this.handleCharacterDataMutation(mutation);
                 }
 
                 if (mutation.type === 'attributes' &&
                     this.translatableAttributes.includes(mutation.attributeName)) {
-                    const cacheKey = this.getCacheKey(mutation.target.getAttribute(mutation.attributeName));
-                    this.translationCache.delete(cacheKey);
-                    this.processedElements.delete(mutation.target);
-                    changes.add(mutation.target);
+                    await this.handleAttributeMutation(mutation);
                 }
-            }
-
-            const elementsToTranslate = Array.from(changes);
-            for (let i = 0; i < elementsToTranslate.length; i += this.batchSize) {
-                const batch = elementsToTranslate.slice(i, i + this.batchSize);
-                await Promise.all(batch.map(el => this.translateElement(el)));
-                await new Promise(resolve => setTimeout(resolve, this.batchDelay));
             }
         });
 
@@ -157,17 +140,18 @@ export class DOMManager {
         const text = node.textContent.trim();
         if (!text) return;
 
+        const spaces = this.getTextSpaces(node);
         const cacheKey = this.getCacheKey(text);
         let translation = this.translationCache.get(cacheKey);
 
         if (!translation) {
-            const processed = this.textProcessor.processText(text);
-            translation = await this.translationManager.translate(processed.pattern);
+            translation = await this.translateTextWithSpaces(node, text);
             this.translationCache.set(cacheKey, translation);
         }
 
         if (translation !== text) {
             node.parentElement.dataset.originalText = text;
+            node.parentElement.dataset.originalSpaces = JSON.stringify(spaces);
             node.textContent = translation;
         }
     }
@@ -190,6 +174,54 @@ export class DOMManager {
                 element.setAttribute(attr, translation);
             }
         }
+    }
+
+    async handleCharacterDataMutation(mutation) {
+        const node = mutation.target;
+        const parentElement = node.parentElement;
+        const currentText = node.textContent.trim();
+        const originalText = parentElement.dataset.originalText;
+
+        if (!currentText || (originalText && currentText === originalText)) {
+            return;
+        }
+
+        const spaces = this.getTextSpaces(node);
+        const cacheKey = this.getCacheKey(currentText);
+        this.translationCache.delete(cacheKey);
+
+        const finalTranslation = await this.translateTextWithSpaces(node, currentText);
+
+        parentElement.dataset.originalText = currentText;
+        parentElement.dataset.originalSpaces = JSON.stringify(spaces);
+        node.textContent = finalTranslation;
+    }
+
+    async handleAttributeMutation(mutation) {
+        const element = mutation.target;
+        const value = element.getAttribute(mutation.attributeName);
+        const cacheKey = this.getCacheKey(`attr:${mutation.attributeName}:${value}`);
+        this.translationCache.delete(cacheKey);
+        this.processedElements.delete(element);
+        await this.translateElement(element);
+    }
+
+    getTextSpaces(node) {
+        return {
+            leading: node.textContent.match(/^\s*/)[0],
+            trailing: node.textContent.match(/\s*$/)[0]
+        };
+    }
+
+    applyTranslationWithSpaces(translation, spaces) {
+        return spaces.leading + translation + spaces.trailing;
+    }
+
+    async translateTextWithSpaces(node, text) {
+        const processed = this.textProcessor.processText(text);
+        const translation = await this.translationManager.translate(processed.pattern);
+        const spaces = this.getTextSpaces(node);
+        return this.applyTranslationWithSpaces(translation, spaces);
     }
 
     getCacheKey(text) {
