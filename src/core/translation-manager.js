@@ -7,13 +7,50 @@ export class TranslationManager {
         this.translations = new Map();
         this.translationLoader = new TranslationLoader();
         this.localeManager = new LocaleManager();
+        this.currentPath = null;
+        this.commonTranslations = new Map();
     }
 
     async load(currentPath) {
+        this.currentPath = currentPath;
         await LocaleStorage.setCurrentPath(currentPath);
         const currentLocale = await LocaleStorage.getCurrentLocale();
-        const translations = await this.translationLoader.load(currentLocale, currentPath);
 
+        if (currentLocale === 'en') {
+            return { page: { data: {} } };
+        }
+
+        // Load common translations if not loaded
+        if (!this.commonTranslations.has(currentLocale)) {
+            const commonData = await this.localeManager.loadCommonTranslations(currentLocale);
+            if (commonData) {
+                this.commonTranslations.set(currentLocale, commonData);
+            }
+        }
+
+        // Load page translations
+        const translations = await this.translationLoader.load(currentLocale, currentPath);
+        if (translations?.page?.data) {
+            this.setTranslations(translations.page, currentLocale);
+        }
+
+        return translations;
+    }
+
+    async refresh() {
+        if (!this.currentPath) return null;
+
+        const currentLocale = await LocaleStorage.getCurrentLocale();
+        if (currentLocale === 'en') return null;
+
+        // Refresh common translations
+        const commonData = await this.localeManager.loadCommonTranslations(currentLocale, true);
+        if (commonData) {
+            this.commonTranslations.set(currentLocale, commonData);
+        }
+
+        // Refresh page translations
+        const translations = await this.translationLoader.loadFresh(currentLocale, this.currentPath);
         if (translations?.page?.data) {
             this.setTranslations(translations.page, currentLocale);
         }
@@ -27,7 +64,10 @@ export class TranslationManager {
         }
 
         const currentTranslations = this.translations.get(locale);
+        const commonData = this.commonTranslations.get(locale) || {};
+
         currentTranslations.data = {
+            ...commonData,
             ...currentTranslations.data,
             ...translations.data
         };
@@ -54,5 +94,16 @@ export class TranslationManager {
     clearCache() {
         this.translationLoader.clearCache();
         this.translations.clear();
+        this.commonTranslations.clear();
+        this.currentPath = null;
+    }
+
+    getCurrentTranslations(locale) {
+        return this.translations.get(locale)?.data || {};
+    }
+
+    hasTranslations(locale) {
+        return this.translations.has(locale) &&
+            Object.keys(this.translations.get(locale).data).length > 0;
     }
 }

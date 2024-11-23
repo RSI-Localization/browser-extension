@@ -30,6 +30,10 @@ export class LocaleAPI {
         return this.fetchJSON(this.buildUrl('localization/website/languages'));
     }
 
+    static async getRandomContributorCode() {
+        return this.fetchJSON(this.buildUrl('localization/contributors/random'));
+    }
+
     static async getModuleResources(locale, path) {
         const response = await this.fetchJSON(
             this.buildUrl(`localization/website/${locale}/modules${path}`)

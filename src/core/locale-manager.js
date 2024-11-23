@@ -4,24 +4,20 @@ import {LocaleStorage} from '../utils/locale-storage';
 
 export class LocaleManager {
     STORAGE_KEY = 'path_metadata';
-    VERSION_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    VERSION_CACHE_DURATION = 5 * 60 * 1000;
 
     constructor() {
         this.currentLocale = null;
         this.pathData = null;
         this.updateInProgress = false;
-        this.commonTranslations = new Map();
         this.versionCache = null;
         this.lastVersionCheck = null;
     }
 
     async load() {
         this.currentLocale = await LocaleStorage.getCurrentLocale();
-        if (this.currentLocale !== 'en') {
-            await this.loadCommonTranslations(this.currentLocale);
-        }
-
         const stored = await LocaleStorage.get(this.STORAGE_KEY);
+
         if (stored?.[this.STORAGE_KEY]) {
             this.pathData = stored[this.STORAGE_KEY];
             PathValidator.setPathData(this.pathData);
@@ -59,55 +55,41 @@ export class LocaleManager {
         return versionData;
     }
 
-    findBestMatch(serviceData, path) {
-        if (path === '/' || path === '') {
-            const mainData = serviceData?.modules?.main?.files['index.json'];
-            return {
-                bestMatchPath: '/main/index',
-                version: mainData?.version
-            };
-        }
+    async checkForUpdates() {
+        if (this.updateInProgress) return false;
+        this.updateInProgress = true;
 
-        const pathParts = path.split('/').filter(Boolean);
-        const section = pathParts[0];
-        const remainingPath = pathParts.slice(1);
+        try {
+            const currentLocale = await LocaleStorage.getCurrentLocale();
+            if (currentLocale === 'en' || !navigator.onLine) return false;
 
-        const sectionData = serviceData?.modules?.[section];
-        if (!sectionData?.files) return {};
+            const versionData = await this.getVersionData();
+            const needsUpdate = await LocaleStorage.needsUpdate(versionData);
 
-        while (remainingPath.length >= 0) {
-            const currentPath = '/' + remainingPath.join('/');
-            const jsonPath = currentPath + (currentPath === '/' ? 'index.json' : '.json');
-
-            if (sectionData.files[jsonPath]) {
-                return {
-                    bestMatchPath: currentPath === '/' ? `/${section}/index` : `/${section}${currentPath}`,
-                    version: sectionData.files[jsonPath].version
-                };
+            if (needsUpdate) {
+                this.versionCache = null;
+                this.lastVersionCheck = null;
+                await this.initializePaths();
+                await LocaleStorage.saveGlobalMetadata(versionData);
+                return true;
             }
-
-            if (remainingPath.length === 0) break;
-            remainingPath.pop();
+            return false;
+        } finally {
+            this.updateInProgress = false;
         }
-
-        return {};
     }
 
-    async loadCommonTranslations(locale) {
-        if (this.commonTranslations.has(locale)) {
-            return this.commonTranslations.get(locale);
-        }
+    async loadCommonTranslations(locale, forceFresh = false) {
+        if (locale === 'en') return null;
 
-        const cached = await LocaleStorage.getCommonTranslations(locale);
-        if (cached) {
-            this.commonTranslations.set(locale, cached.data);
-            return cached.data;
+        if (!forceFresh) {
+            const cached = await LocaleStorage.getCommonTranslations(locale);
+            if (cached) return cached.data;
         }
 
         const response = await LocaleAPI.getCommonResources('website', locale);
         if (response) {
             await LocaleStorage.saveCommonTranslations(locale, response.data, response.version);
-            this.commonTranslations.set(locale, response.data);
             return response.data;
         }
 
@@ -124,67 +106,44 @@ export class LocaleManager {
         if (!bestMatchPath) return {};
 
         const response = await LocaleAPI.getModuleResources(locale, bestMatchPath);
-        const commonData = await this.loadCommonTranslations(locale);
-
         return {
-            ...commonData,
             ...response.data,
             version: version
         };
     }
 
-    async checkForUpdates() {
-        if (this.updateInProgress) return;
-        this.updateInProgress = true;
+    findBestMatch(serviceData, path) {
+        if (path === '/' || path === '') {
+            const mainData = serviceData?.modules?.main?.files['index.json'];
+            return {
+                bestMatchPath: '/main/index.json',
+                version: mainData?.version
+            };
+        }
 
-        try {
-            const currentLocale = await LocaleStorage.getCurrentLocale();
-            if (currentLocale === 'en') return;
-            if (!navigator.onLine) return;
+        const pathParts = path.split('/').filter(Boolean);
+        const section = pathParts[0] || 'main';
+        const remainingPath = pathParts.slice(1);
 
-            const versionData = await this.getVersionData();
-            const needsUpdate = await LocaleStorage.needsUpdate(versionData);
+        const sectionData = serviceData?.modules?.[section];
+        if (!sectionData?.files) return {};
 
-            if (needsUpdate) {
-                this.versionCache = null;
-                this.lastVersionCheck = null;
-                await this.initializePaths();
-                await LocaleStorage.saveGlobalMetadata(versionData);
-                await this.updateCurrentLocale();
-                await this.updateCommonTranslations(currentLocale);
+        while (remainingPath.length >= 0) {
+            const currentPath = '/' + remainingPath.join('/');
+            const jsonPath = currentPath + (currentPath === '/' ? 'index.json' : '.json');
+
+            if (sectionData.files[jsonPath]) {
+                return {
+                    bestMatchPath: `/${section}${jsonPath}`,
+                    version: sectionData.files[jsonPath].version
+                };
             }
-        } finally {
-            this.updateInProgress = false;
+
+            if (remainingPath.length === 0) break;
+            remainingPath.pop();
         }
-    }
 
-    async updateCommonTranslations(locale) {
-        const response = await LocaleAPI.getCommonResources('website', locale);
-        if (response) {
-            await LocaleStorage.saveCommonTranslations(locale, response.data, response.version);
-            this.commonTranslations.set(locale, response.data);
-            document.dispatchEvent(new CustomEvent('commonTranslationsUpdated', {
-                detail: { locale }
-            }));
-        }
-    }
-
-    async updateCurrentLocale() {
-        const currentLocale = await LocaleStorage.getCurrentLocale();
-        const currentPath = await LocaleStorage.getCurrentPath();
-
-        if (!currentLocale || !currentPath) return;
-        await this.processUpdate(currentLocale, currentPath);
-    }
-
-    async processUpdate(locale, path) {
-        const data = await this.getLocaleData(locale, path);
-        if (data) {
-            await LocaleStorage.saveLocaleData(locale, path, data);
-            document.dispatchEvent(new CustomEvent('translationUpdated', {
-                detail: { locale, path }
-            }));
-        }
+        return {};
     }
 
     async initializePaths() {

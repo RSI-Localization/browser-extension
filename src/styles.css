@@ -4,3 +4,22 @@
     word-break: keep-all !important;
     font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif !important;
 }
+
+.contributor-code-button {
+    color: #3ca1f6 !important;
+    text-decoration: underline !important;
+    transition: .1s ease-in-out !important;
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font: inherit !important;
+    cursor: pointer !important;
+    outline: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+}
+
+.contributor-code-button:hover {
+    color: #80a9ce !important;
+}

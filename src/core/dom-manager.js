@@ -3,23 +3,9 @@ import QuickLRU from 'quick-lru';
 export class DOMManager {
     constructor() {
         this.excludeSelectors = [
-            'script',
-            'style',
-            'code',
-            'pre',
-            'iframe',
-            'img',
-            'video',
-            'svg',
-            'path',
-            'circle',
-            'rect',
-            'line',
-            'polyline',
-            'polygon',
-            'g',
-            'defs',
-            'use'
+            'script', 'style', 'code', 'pre', 'iframe', 'img', 'video',
+            'svg', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon',
+            'g', 'defs', 'use'
         ];
 
         this.translatableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
@@ -30,6 +16,7 @@ export class DOMManager {
         this.batchSize = 50;
         this.batchDelay = 16;
         this.observer = null;
+        this.isRefreshing = false;
     }
 
     async load(textProcessor, translationManager) {
@@ -40,6 +27,17 @@ export class DOMManager {
         this.setupIntersectionObserver();
         this.setupMutationObserver();
         this.setupRouteChangeListener();
+
+        document.addEventListener('translationsRefreshed', async () => {
+            if (this.isRefreshing) return;
+            this.isRefreshing = true;
+
+            this.translationCache.clear();
+            this.processedElements = new WeakSet();
+            await this.processVisibleContent();
+
+            this.isRefreshing = false;
+        });
     }
 
     async processVisibleContent() {
@@ -79,6 +77,7 @@ export class DOMManager {
                     mutation.addedNodes.forEach(node => {
                         if (node.nodeType === Node.ELEMENT_NODE && !this.isExcluded(node)) {
                             this.translateElement(node);
+                            this.handleComponentDetection(node);
                         }
                     });
                 }
@@ -123,6 +122,17 @@ export class DOMManager {
         await this.processVisibleContent();
     }
 
+    async handleComponentDetection(node) {
+        const referralInput = node.matches('[data-cy-id="__referral-code"]') ?
+            node : node.querySelector('[data-cy-id="__referral-code"]');
+
+        if (referralInput) {
+            document.dispatchEvent(new CustomEvent('referralCodeInputReady', {
+                detail: { element: referralInput }
+            }));
+        }
+    }
+
     async translateElement(element) {
         if (this.processedElements.has(element) || this.isExcluded(element)) return;
 
@@ -133,7 +143,6 @@ export class DOMManager {
         ]);
 
         this.processedElements.add(element);
-        element.setAttribute('rsi-localization', '');
     }
 
     async translateTextNode(node) {
@@ -150,8 +159,10 @@ export class DOMManager {
         }
 
         if (translation !== text) {
-            node.parentElement.dataset.originalText = text;
-            node.parentElement.dataset.originalSpaces = JSON.stringify(spaces);
+            if (!node.parentElement.dataset.originalText) {
+                node.parentElement.dataset.originalText = text;
+                node.parentElement.dataset.originalSpaces = JSON.stringify(spaces);
+            }
             node.textContent = translation;
         }
     }
@@ -171,6 +182,9 @@ export class DOMManager {
             }
 
             if (translation !== value) {
+                if (!element.dataset[`original${attr}`]) {
+                    element.dataset[`original${attr}`] = value;
+                }
                 element.setAttribute(attr, translation);
             }
         }
