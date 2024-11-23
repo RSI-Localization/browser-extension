@@ -4,7 +4,6 @@
   "version": "1.0",
   "description": "Localise the Roberts Space Industries website. Developed by Laeng with GalaxyHub.",
   "permissions": [
-    "activeTab",
     "storage"
   ],
   "content_scripts": [

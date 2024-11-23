@@ -47,6 +47,10 @@ module.exports = {
                             ...JSON.parse(content.toString()),
                         }))
                     }
+                },
+                {
+                    from: "assets",
+                    to: "assets"
                 }
             ]
         })
