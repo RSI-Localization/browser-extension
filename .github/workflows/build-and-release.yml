@@ -30,9 +30,8 @@ jobs:
         
       - name: Create ZIP archive
         run: |
-          VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')
           cd dist
-          zip -r ../rsi-localization-$VERSION.zip *
+          zip -r ../rsi-localization-${{ github.event.release.tag_name }}.zip *
           
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
