@@ -1,0 +1,45 @@
+name: Build and Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Update manifest version
+        run: |
+          VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')
+          jq '.version = "'$VERSION'"' manifest.json > manifest.json.tmp
+          mv manifest.json.tmp manifest.json
+          
+      - name: Install dependencies
+        run: npm install
+        
+      - name: Build
+        run: npm run build
+        
+      - name: Create ZIP archive
+        run: |
+          VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')
+          cd dist
+          zip -r ../rsi-localization-$VERSION.zip *
+          
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./rsi-localization-${{ github.event.release.tag_name }}.zip
+          asset_name: rsi-localization-${{ github.event.release.tag_name }}.zip
+          asset_content_type: application/zip
