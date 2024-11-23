@@ -10,10 +10,6 @@ export class ReferralButton {
     async init(translationManager) {
         this.translationManager = translationManager;
 
-        // 초기 페이지 로드 시 존재하는 레퍼럴 코드 입력칸 처리
-        const initialInputs = document.querySelectorAll('[data-cy-id="__referral-code"]');
-        initialInputs.forEach(input => this.processReferralInput(input));
-
         // 동적으로 추가되는 레퍼럴 코드 입력칸 처리
         document.addEventListener('referralCodeInputReady', (e) => {
             this.processReferralInput(e.detail.element);

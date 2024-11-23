@@ -35,8 +35,9 @@ export class LocaleAPI {
     }
 
     static async getModuleResources(locale, path) {
+        const cleanPath = path.replace('.json', '');
         const response = await this.fetchJSON(
-            this.buildUrl(`localization/website/${locale}/modules${path}`)
+            this.buildUrl(`localization/website/${locale}/modules${cleanPath}`)
         );
         return {
             data: response.data,
@@ -55,8 +56,9 @@ export class LocaleAPI {
     }
 
     static async getStandaloneResources(locale, path) {
+        const cleanPath = path.replace('.json', '');
         const response = await this.fetchJSON(
-            this.buildUrl(`localization/website/${locale}/standalone${path}`)
+            this.buildUrl(`localization/website/${locale}/standalone${cleanPath}`)
         );
         return {
             data: response.data,
@@ -66,8 +68,8 @@ export class LocaleAPI {
 
     static async getBulkResources(locale, options) {
         const requestBody = {
-            modules: options.modules || [],
-            standalone: options.standalone || [],
+            modules: options.modules.map(path => path.replace('.json', '')),
+            standalone: options.standalone.map(path => path.replace('.json', '')),
             includeCommon: options.includeCommon || false
         };
 

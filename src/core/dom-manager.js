@@ -5,7 +5,10 @@ export class DOMManager {
         this.excludeSelectors = [
             'script', 'style', 'code', 'pre', 'iframe', 'img', 'video',
             'svg', 'path', 'circle', 'rect', 'line', 'polyline', 'polygon',
-            'g', 'defs', 'use'
+            'g', 'defs', 'use', 'audio', 'source', 'track', 'map', 'area',
+            'canvas', 'embed', 'object', 'param', 'source', 'track', 'map', 'area',
+            'noscript', 'template', 'object', 'meta', 'link', 'base', 'hr',
+            'math', 'mtext', 'annotation', 'semantics'
         ];
 
         this.translatableAttributes = ['placeholder', 'title', 'alt', 'aria-label'];
@@ -13,7 +16,7 @@ export class DOMManager {
         this.processedElements = new WeakSet();
         this.textProcessor = null;
         this.translationManager = null;
-        this.batchSize = 50;
+        this.batchSize = 64;
         this.batchDelay = 16;
         this.observer = null;
         this.isRefreshing = false;
@@ -48,7 +51,10 @@ export class DOMManager {
 
         for (let i = 0; i < visibleElements.length; i += this.batchSize) {
             const batch = visibleElements.slice(i, i + this.batchSize);
-            await Promise.all(batch.map(el => this.translateElement(el)));
+            await Promise.all(batch.map(el => {
+                this.translateElement(el);
+                this.handleComponentDetection(el);
+            }));
             await new Promise(resolve => requestAnimationFrame(resolve));
         }
     }
@@ -182,8 +188,9 @@ export class DOMManager {
             }
 
             if (translation !== value) {
-                if (!element.dataset[`original${attr}`]) {
-                    element.dataset[`original${attr}`] = value;
+                const safeAttrName = attr.replace(/-/g, '');
+                if (!element.dataset[`original${safeAttrName}`]) {
+                    element.dataset[`original${safeAttrName}`] = value;
                 }
                 element.setAttribute(attr, translation);
             }
