@@ -5,17 +5,11 @@
   "description": "Localise the Roberts Space Industries website. Developed by Laeng with GalaxyHub.",
   "permissions": [
     "activeTab",
-    "storage",
-    "background",
-    "alarms"
+    "storage"
   ],
   "host_permissions": [
-    "https://rsi.laeng.co/*",
-    "https://rsi-loaclization.test/*"
+    "https://rsi.laeng.co/*"
   ],
-  "background": {
-    "service_worker": "dist/background.js"
-  },
   "content_scripts": [
     {
       "matches": [

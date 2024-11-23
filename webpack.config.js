@@ -4,7 +4,6 @@ const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 module.exports = {
     entry: {
-        background: './src/background.js',
         index: './src/index.js',
     },
     output: {
@@ -44,10 +43,8 @@ module.exports = {
                     from: "manifest.json",
                     to: "manifest.json",
                     transform(content) {
-                        // manifest.json에서 불필요한 키 제거 또는 수정
                         return Buffer.from(JSON.stringify({
                             ...JSON.parse(content.toString()),
-                            // development용 키 제거
                         }))
                     }
                 }
